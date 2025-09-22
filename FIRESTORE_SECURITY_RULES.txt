@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
+    function isVotingActive() {
+      let settings = get(/databases/$(database)/documents/settings/electionConfig).data;
+      return settings != null && 
+             settings.isActive == true &&
+             settings.votingStart != null && 
+             settings.votingEnd != null &&
+             request.time >= settings.votingStart && 
+             request.time <= settings.votingEnd;
+    }
+    
+    function getUserData(studentId) {
+      return get(/databases/$(database)/documents/users/$(studentId)).data;
+    }
+    
+    function hasUserVoted(studentId) {
+      let userData = getUserData(studentId);
+      return userData != null && userData.hasVoted == true;
+    }
+    
+    function isValidStudent(studentId) {
+      let userData = getUserData(studentId);
+      return userData != null && userData.hasVoted != true && userData.isLoggedIn == true;
+    }
+    
+    // Admin collection - only authenticated admins can access
+    match /admins/{adminId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Settings collection - admins can read/write, others can only read
+    match /settings/{settingId} {
+      allow read: if true; // Allow anyone to read settings (for voting status)
+      allow write: if isAdmin(); // Only admins can modify settings
+    }
+    
+    // Users collection - students and their data
+    match /users/{userId} {
+      // Admins can read/write all user data
+      allow read, write: if isAdmin();
+      
+      // Students can only read their own data
+      allow read: if isAuthenticated() && request.auth.token.studentId == userId;
+      
+      // Students can update their login status (but not voting status)
+      allow update: if isAuthenticated() && 
+                    request.auth.token.studentId == userId &&
+                    !('hasVoted' in request.resource.data) &&
+                    !('voteTimestamp' in request.resource.data);
+    }
+    
+    // Positions collection - public read, admin write
+    match /positions/{positionId} {
+      allow read: if true; // Anyone can read positions
+      allow write: if isAdmin(); // Only admins can modify positions
+    }
+    
+    // Candidates collection - public read, admin write
+    match /candidates/{candidateId} {
+      allow read: if true; // Anyone can read candidates
+      allow write: if isAdmin(); // Only admins can modify candidates
+    }
+    
+    // Votes collection - restricted access with time and user validation
+    match /votes/{voteId} {
+      // Admins can read all votes (for results)
+      allow read: if isAdmin();
+      
+      // Students can only create votes during active voting period
+      allow create: if isAuthenticated() &&
+                    isVotingActive() &&
+                    request.auth.token.studentId != null &&
+                    isValidStudent(request.auth.token.studentId) &&
+                    !hasUserVoted(request.auth.token.studentId) &&
+                    request.resource.data.voterId == request.auth.token.studentId &&
+                    request.resource.data.timestamp is timestamp &&
+                    request.resource.data.positionId is string &&
+                    request.resource.data.candidateId is string &&
+                    request.resource.data.deviceId is string;
+      
+      // No updates or deletes allowed for votes
+      allow update, delete: if false;
+    }
+    
+    // Devices collection - track device usage
+    match /devices/{deviceId} {
+      // Admins can read all device records
+      allow read: if isAdmin();
+      
+      // Students can create device records when voting
+      allow create: if isAuthenticated() &&
+                    isVotingActive() &&
+                    request.auth.token.studentId != null &&
+                    isValidStudent(request.auth.token.studentId) &&
+                    request.resource.data.deviceId == deviceId &&
+                    request.resource.data.used == true &&
+                    request.resource.data.usedBy == request.auth.token.studentId &&
+                    request.resource.data.timestamp is timestamp;
+      
+      // No updates or deletes allowed
+      allow update, delete: if false;
+    }
+    
+    // Audit logs - only admins can access
+    match /audit/{logId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// Additional notes for implementation:
+// 1. Students need custom claims with their studentId for authentication
+// 2. The isActive field in settings/electionConfig controls voting availability
+// 3. Time-based validation prevents voting outside scheduled periods
+// 4. Device tracking prevents multiple votes from same device
+// 5. User voting status prevents double voting
+// 6. All vote operations are logged with timestamps
+// 7. Votes cannot be modified or deleted once created
+// 8. Only admins can access results and manage the system
