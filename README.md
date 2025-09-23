@@ -92,8 +92,15 @@ In Firebase Authentication, manually create an admin account, then add to Firest
 Prepare an Excel/CSV file with columns:
 - `studentId`: Unique student identifier
 - `name`: Student full name
-- `class`: Student class/grade
+- `class`: Student class/grade (e.g., BCA-1, MCA-1)
+- `semester`: Semester information (optional, auto-detected for BCA/MCA)
 - `password`: Login password (optional, defaults to 'password123')
+
+### 4. Export Student Data
+The admin portal provides multiple export options:
+- **Export Credentials (by Semester)**: Exports all student credentials organized by semester
+- **Export by Semester & Class**: Exports students organized by both semester and class combinations
+- **Export Results (by Semester)**: Election results with student participation data organized by semester
 
 ## 🗃️ Database Structure
 

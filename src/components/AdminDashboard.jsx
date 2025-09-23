@@ -188,16 +188,20 @@ function AdminDashboard() {
 
   const handleAddStudent = async (formData) => {
     try {
-      await setDoc(doc(db, 'users', formData.studentId), {
+      // Add semester information to student data
+      const studentData = {
         studentId: formData.studentId,
         name: formData.name,
         class: formData.class,
+        semester: formData.semester || '',
         password: formData.password || 'password123',
         hasVoted: false,
         isLoggedIn: false,
         deviceId: null,
         createdAt: new Date()
-      });
+      };
+      
+      await setDoc(doc(db, 'users', formData.studentId), studentData);
       loadData();
       setShowModal(false);
     } catch (error) {
@@ -241,12 +245,16 @@ function AdminDashboard() {
 
   const handleEditStudent = async (formData) => {
     try {
-      await updateDoc(doc(db, 'users', editItem.studentId), {
+      // Update semester information for student
+      const studentData = {
         name: formData.name,
         class: formData.class,
+        semester: formData.semester || '',
         password: formData.password,
         updatedAt: new Date()
-      });
+      };
+      
+      await updateDoc(doc(db, 'users', editItem.studentId), studentData);
       loadData();
       setShowModal(false);
       setEditItem(null);
@@ -502,11 +510,11 @@ function AdminDashboard() {
     if (!confirmSeed) return;
 
     const testStudents = [
-      { studentId: 'S101', name: 'Alice Johnson', class: 'BCA-1', password: 'pass123' },
-      { studentId: 'S102', name: 'Bob Smith', class: 'BCA-1', password: 'pass123' },
-      { studentId: 'S103', name: 'Charlie Brown', class: 'BCA-2', password: 'pass123' },
-      { studentId: 'S104', name: 'Diana Prince', class: 'BCA-2', password: 'pass123' },
-      { studentId: 'S105', name: 'Eve Wilson', class: 'BCA-3', password: 'pass123' }
+      { studentId: 'S101', name: 'Alice Johnson', class: 'BCA-1', semester: 'Semester 1', password: 'pass123' },
+      { studentId: 'S102', name: 'Bob Smith', class: 'BCA-1', semester: 'Semester 1', password: 'pass123' },
+      { studentId: 'S103', name: 'Charlie Brown', class: 'BCA-3', semester: 'Semester 3', password: 'pass123' },
+      { studentId: 'S104', name: 'Diana Prince', class: 'BCA-5', semester: 'Semester 5', password: 'pass123' },
+      { studentId: 'S105', name: 'Eve Wilson', class: 'MCA-1', semester: 'Semester 1', password: 'pass123' }
     ];
 
     try {
@@ -541,10 +549,32 @@ function AdminDashboard() {
         // Auto-generate password if not provided
         const password = student.password || generatePassword();
         
+        // Determine semester based on class if not provided
+        let semester = student.semester || '';
+        if (!semester && student.class) {
+          // Extract semester from class name for BCA and MCA
+          if (student.class.includes('BCA')) {
+            // BCA semesters: 1, 3, 5
+            if (student.class.includes('1') || student.class.includes('Sem1') || student.class.includes('Sem-1')) {
+              semester = 'Semester 1';
+            } else if (student.class.includes('3') || student.class.includes('Sem3') || student.class.includes('Sem-3')) {
+              semester = 'Semester 3';
+            } else if (student.class.includes('5') || student.class.includes('Sem5') || student.class.includes('Sem-5')) {
+              semester = 'Semester 5';
+            }
+          } else if (student.class.includes('MCA')) {
+            // MCA semesters: 1
+            if (student.class.includes('1') || student.class.includes('Sem1') || student.class.includes('Sem-1')) {
+              semester = 'Semester 1';
+            }
+          }
+        }
+        
         await setDoc(doc(db, 'users', studentId), {
           studentId: studentId,
           name: student.name,
           class: student.class,
+          semester: semester,
           password: password,
           hasVoted: false,
           isLoggedIn: false,
@@ -643,17 +673,96 @@ Please share this with the student securely.`);
 
   // Function to export student credentials
   const exportCredentials = () => {
-    const credentials = students.map(student => ({
+    // Group students by semester
+    const studentsBySemester = {};
+    students.forEach(student => {
+      const semester = student.semester || 'No Semester';
+      if (!studentsBySemester[semester]) {
+        studentsBySemester[semester] = [];
+      }
+      studentsBySemester[semester].push({
+        studentId: student.studentId,
+        name: student.name,
+        class: student.class,
+        semester: student.semester || '',
+        password: student.password
+      });
+    });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    
+    // Create a sheet for each semester
+    Object.keys(studentsBySemester).forEach(semester => {
+      const ws = XLSX.utils.json_to_sheet(studentsBySemester[semester]);
+      XLSX.utils.book_append_sheet(wb, ws, semester);
+    });
+    
+    // Also create a summary sheet with all students
+    const allCredentials = students.map(student => ({
       studentId: student.studentId,
       name: student.name,
       class: student.class,
+      semester: student.semester || '',
       password: student.password
     }));
+    const summaryWs = XLSX.utils.json_to_sheet(allCredentials);
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'All Students');
+    
+    XLSX.writeFile(wb, 'student-credentials-by-semester.xlsx');
+  };
 
-    const ws = XLSX.utils.json_to_sheet(credentials);
+  // Function to export students organized by semester and class
+  const exportStudentsBySemester = () => {
+    // Group students by semester and then by class
+    const studentsBySemester = {};
+    students.forEach(student => {
+      const semester = student.semester || 'No Semester';
+      const studentClass = student.class || 'No Class';
+      
+      if (!studentsBySemester[semester]) {
+        studentsBySemester[semester] = {};
+      }
+      
+      if (!studentsBySemester[semester][studentClass]) {
+        studentsBySemester[semester][studentClass] = [];
+      }
+      
+      studentsBySemester[semester][studentClass].push({
+        studentId: student.studentId,
+        name: student.name,
+        class: student.class,
+        semester: student.semester || '',
+        hasVoted: student.hasVoted ? 'Yes' : 'No'
+      });
+    });
+
+    // Create workbook
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Student Credentials');
-    XLSX.writeFile(wb, 'student-credentials.xlsx');
+    
+    // Create sheets for each semester and class combination
+    Object.keys(studentsBySemester).forEach(semester => {
+      Object.keys(studentsBySemester[semester]).forEach(studentClass => {
+        const sheetName = `${semester} - ${studentClass}`.substring(0, 31); // Excel sheet names limited to 31 chars
+        const ws = XLSX.utils.json_to_sheet(studentsBySemester[semester][studentClass]);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+    });
+    
+    // Also create summary sheets
+    Object.keys(studentsBySemester).forEach(semester => {
+      const semesterStudents = [];
+      Object.keys(studentsBySemester[semester]).forEach(studentClass => {
+        studentsBySemester[semester][studentClass].forEach(student => {
+          semesterStudents.push(student);
+        });
+      });
+      
+      const ws = XLSX.utils.json_to_sheet(semesterStudents);
+      XLSX.utils.book_append_sheet(wb, ws, `${semester} Summary`.substring(0, 31));
+    });
+    
+    XLSX.writeFile(wb, 'students-by-semester-and-class.xlsx');
   };
 
   const getStats = () => {
@@ -693,11 +802,47 @@ Please share this with the student securely.`);
       };
     });
     
-    // Convert to worksheet
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    // Group students by semester for additional sheets
+    const studentsBySemester = {};
+    students.forEach(student => {
+      const semester = student.semester || 'No Semester';
+      if (!studentsBySemester[semester]) {
+        studentsBySemester[semester] = [];
+      }
+      studentsBySemester[semester].push({
+        studentId: student.studentId,
+        name: student.name,
+        class: student.class,
+        semester: student.semester || '',
+        hasVoted: student.hasVoted ? 'Yes' : 'No'
+      });
+    });
+    
+    // Create workbook
     const wb = XLSX.utils.book_new();
+    
+    // Add main results sheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
     XLSX.utils.book_append_sheet(wb, ws, 'Election Results');
-    XLSX.writeFile(wb, 'election-results.xlsx');
+    
+    // Create a sheet for each semester
+    Object.keys(studentsBySemester).forEach(semester => {
+      const ws = XLSX.utils.json_to_sheet(studentsBySemester[semester]);
+      XLSX.utils.book_append_sheet(wb, ws, `${semester} Students`);
+    });
+    
+    // Also create a summary sheet with all students
+    const allStudents = students.map(student => ({
+      studentId: student.studentId,
+      name: student.name,
+      class: student.class,
+      semester: student.semester || '',
+      hasVoted: student.hasVoted ? 'Yes' : 'No'
+    }));
+    const summaryWs = XLSX.utils.json_to_sheet(allStudents);
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'All Students');
+    
+    XLSX.writeFile(wb, 'election-results-by-semester.xlsx');
   };
 
   const renderOverview = () => (
@@ -843,7 +988,7 @@ Please share this with the student securely.`);
           className="flex items-center btn-primary"
         >
           <Download className="h-4 w-4 mr-2" />
-          Export Results
+          Export Results (by Semester)
         </button>
       </div>
       
@@ -1168,29 +1313,52 @@ Please share this with the student securely.`);
               <Settings className="h-4 w-4 mr-2" />
               Reset All Passwords
             </button>
-            <button
-              onClick={exportCredentials}
-              className="btn-secondary flex items-center"
-              disabled={students.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export Credentials
-            </button>
             <div className="relative group">
-              <label className="btn-secondary flex items-center cursor-pointer">
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Excel
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={(e) => e.target.files[0] && handleUploadStudents(e.target.files[0])}
-                />
-              </label>
+              <button
+                onClick={exportCredentials}
+                className="btn-secondary flex items-center"
+                disabled={students.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export Credentials (by Semester)
+              </button>
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 w-64 z-10">
-                <p>Upload Excel/CSV with columns:</p>
-                <p>studentId, name, class, password</p>
-                <p className="mt-1"><a href="/student-template.csv" download className="text-blue-300 hover:underline">Download template</a></p>
+                <p>Export student credentials organized by semester</p>
+                <p>Each semester will be in a separate sheet</p>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <div className="relative group">
+                <label className="btn-secondary flex items-center cursor-pointer">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Excel
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => e.target.files[0] && handleUploadStudents(e.target.files[0])}
+                  />
+                </label>
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 w-64 z-10">
+                  <p>Upload Excel/CSV with columns:</p>
+                  <p>studentId, name, class, semester, password</p>
+                  <p className="mt-1"><a href="/student-template.csv" download className="text-blue-300 hover:underline">Download template</a></p>
+                </div>
+              </div>
+              
+              <div className="relative group">
+                <button
+                  onClick={exportStudentsBySemester}
+                  className="btn-secondary flex items-center"
+                  disabled={students.length === 0}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export by Semester & Class
+                </button>
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 w-64 z-10">
+                  <p>Export students organized by semester and class</p>
+                  <p>Each combination will be in a separate sheet</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1203,6 +1371,7 @@ Please share this with the student securely.`);
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -1218,6 +1387,9 @@ Please share this with the student securely.`);
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {student.class}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {student.semester || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1275,8 +1447,9 @@ Please share this with the student securely.`);
           </a>
           <div className="mt-3 text-xs text-blue-700">
             <p className="font-medium">Template Format:</p>
-            <p>Columns: studentId, name, class, password</p>
+            <p>Columns: studentId, name, class, semester, password</p>
             <p>• studentId: Optional (auto-generated if empty)</p>
+            <p>• semester: Optional (auto-generated based on class if empty)</p>
             <p>• password: Optional (auto-generated if empty)</p>
           </div>
         </div>
@@ -1781,9 +1954,23 @@ Please share this with the student securely.`);
                       type="text" 
                       className="form-input" 
                       defaultValue={editItem?.class || ''}
-                      placeholder="e.g., BCA-1, Grade 12A, etc."
+                      placeholder="e.g., BCA-1, MCA-1, etc."
                       required 
                     />
+                  </div>
+                  <div>
+                    <label className="form-label">Semester</label>
+                    <select 
+                      name="semester" 
+                      className="form-input" 
+                      defaultValue={editItem?.semester || ''}
+                    >
+                      <option value="">Select Semester</option>
+                      <option value="Semester 1">Semester 1</option>
+                      <option value="Semester 3">Semester 3</option>
+                      <option value="Semester 5">Semester 5</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">BCA has Semesters 1, 3, 5. MCA has Semester 1.</p>
                   </div>
                   <div>
                     <label className="form-label">Password</label>
