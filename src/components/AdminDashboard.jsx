@@ -284,6 +284,32 @@ function AdminDashboard() {
     }
   };
 
+  const handleDeleteStudentVotes = async (studentId) => {
+    if (!confirm('Are you sure you want to delete all votes for this student? This will reset their voting status.')) {
+      return;
+    }
+    
+    try {
+      // Delete all votes by this student
+      const votesToDelete = votes.filter(v => v.voterId === studentId);
+      for (const vote of votesToDelete) {
+        await deleteDoc(doc(db, 'votes', vote.id));
+      }
+      
+      // Reset student's voting status
+      await updateDoc(doc(db, 'users', studentId), {
+        hasVoted: false,
+        votedAt: null
+      });
+      
+      loadData();
+      alert('Votes deleted successfully and student voting status reset!');
+    } catch (error) {
+      console.error('Error deleting student votes:', error);
+      alert('Error deleting votes. Please try again.');
+    }
+  };
+
   const handleDeleteAllStudents = async () => {
     if (!confirm('Are you sure you want to delete ALL students? This will also delete all their votes. This action cannot be undone.')) {
       return;
@@ -1419,6 +1445,16 @@ Please share this with the student securely.`);
                       <Trash2 className="h-4 w-4 mr-1" />
                       Delete
                     </button>
+                    {student.hasVoted && (
+                      <button
+                        onClick={() => handleDeleteStudentVotes(student.studentId)}
+                        className="text-orange-600 hover:text-orange-900 inline-flex items-center"
+                        title="Delete student's votes"
+                      >
+                        <Vote className="h-4 w-4 mr-1" />
+                        Delete Votes
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
