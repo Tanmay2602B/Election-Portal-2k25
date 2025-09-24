@@ -29,7 +29,8 @@ import {
   UserCheck,
   Calendar,
   Clock,
-  Vote
+  Vote,
+  RefreshCw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import LoadingSpinner from './LoadingSpinner';
@@ -61,10 +62,35 @@ function AdminDashboard() {
 
   // Filter students based on search term
   const filteredStudents = useMemo(() => {
-    if (!searchTerm) return students;
-    return students.filter(student => 
-      student.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    console.log('Filtering students. Search term:', searchTerm, 'Total students:', students.length);
+    if (!searchTerm) {
+      console.log('No search term, returning all students');
+      return students;
+    }
+    
+    const searchTermLower = searchTerm.toLowerCase().trim();
+    const filtered = students.filter(student => {
+      // Check if student name exists and is a string before filtering
+      if (!student.name || typeof student.name !== 'string') {
+        console.warn('Invalid student name found:', student);
+        return false;
+      }
+      
+      // Also check studentId for search
+      const studentIdMatch = student.studentId && 
+        typeof student.studentId === 'string' && 
+        student.studentId.toLowerCase().includes(searchTermLower);
+      
+      const nameMatch = student.name.toLowerCase().includes(searchTermLower);
+      const classMatch = student.class && 
+        typeof student.class === 'string' && 
+        student.class.toLowerCase().includes(searchTermLower);
+      
+      return studentIdMatch || nameMatch || classMatch;
+    });
+    
+    console.log('Filtered students count:', filtered.length);
+    return filtered;
   }, [students, searchTerm]);
 
   // Error boundary state
@@ -128,7 +154,57 @@ function AdminDashboard() {
       // Load students
       const studentsQuery = query(collection(db, 'users'), orderBy('name'));
       const studentsSnapshot = await getDocs(studentsQuery);
-      const studentsData = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log('Total students in Firestore:', studentsSnapshot.size);
+      
+      // Check for duplicate student IDs
+      const studentIds = new Set();
+      const duplicateIds = [];
+      const invalidStudents = [];
+      
+      const studentsData = [];
+      studentsSnapshot.docs.forEach((doc, index) => {
+        const data = { id: doc.id, ...doc.data() };
+        
+        // Validate student data
+        if (!data.studentId) {
+          console.warn('Student document missing studentId:', doc.id, data);
+          invalidStudents.push({ docId: doc.id, reason: 'missing studentId', data });
+          return;
+        }
+        
+        if (!data.name || typeof data.name !== 'string') {
+          console.warn('Student document has invalid name:', doc.id, data);
+          invalidStudents.push({ docId: doc.id, reason: 'invalid name', data });
+          return;
+        }
+        
+        if (studentIds.has(data.studentId)) {
+          duplicateIds.push(data.studentId);
+          console.warn('Skipping duplicate student ID:', data.studentId);
+        } else {
+          studentIds.add(data.studentId);
+          studentsData.push(data);
+        }
+      });
+      
+      console.log('Students loaded:', studentsData.length);
+      console.log('Duplicate student IDs found and skipped:', duplicateIds.length);
+      console.log('Invalid students found:', invalidStudents.length);
+      
+      if (duplicateIds.length > 0) {
+        console.warn('Duplicate student IDs:', duplicateIds);
+      }
+      
+      if (invalidStudents.length > 0) {
+        console.warn('Invalid students:', invalidStudents);
+      }
+      
+      // Check if we have all documents
+      const expectedCount = studentsSnapshot.size - duplicateIds.length - invalidStudents.length;
+      if (studentsData.length !== expectedCount) {
+        console.warn('Mismatch in student count. Expected:', expectedCount, 'Actual:', studentsData.length);
+      }
+      
       setStudents(studentsData);
 
       // Load votes
@@ -807,6 +883,8 @@ Please share this with the student securely.`);
     const totalVotes = votes.length;
     const votingPercentage = totalStudents > 0 ? (votedStudents / totalStudents * 100).toFixed(1) : 0;
     
+    console.log('Stats calculation:', { totalStudents, votedStudents, totalVotes, votingPercentage });
+    
     return { totalStudents, votedStudents, totalVotes, votingPercentage };
   };
 
@@ -1327,6 +1405,13 @@ Please share this with the student securely.`);
           <h3 className="text-lg font-semibold text-gray-900">Students</h3>
           <div className="flex space-x-2">
             <button
+              onClick={loadData}
+              className="btn-secondary flex items-center"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Data
+            </button>
+            <button
               onClick={() => { setModalType('student'); setEditItem(null); setShowModal(true); }}
               className="btn-primary flex items-center"
             >
@@ -1405,7 +1490,7 @@ Please share this with the student securely.`);
           <div className="relative">
             <input
               type="text"
-              placeholder="Search students by name..."
+              placeholder="Search students by name, ID, or class..."
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1434,7 +1519,10 @@ Please share this with the student securely.`);
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStudents.map(student => (
+              {filteredStudents.map(student => {
+                // Log each student being rendered for debugging
+                console.log('Rendering student:', student.studentId, student.name);
+                return (
                 <tr key={student.studentId}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {student.studentId}
@@ -1488,7 +1576,7 @@ Please share this with the student securely.`);
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
           {filteredStudents.length === 0 && (
@@ -1507,8 +1595,6 @@ Please share this with the student securely.`);
       </div>
     </div>
   );
-
-  // ... existing code ...
 
   const renderSchedule = () => (
     <div className="space-y-6">
