@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   collection, 
@@ -56,6 +56,16 @@ function AdminDashboard() {
     allowCrossDepartmentVoting: true,
     isActive: false
   });
+  // Search state for student management
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter students based on search term
+  const filteredStudents = useMemo(() => {
+    if (!searchTerm) return students;
+    return students.filter(student => 
+      student.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [students, searchTerm]);
 
   // Error boundary state
   const [error, setError] = useState(null);
@@ -1390,6 +1400,27 @@ Please share this with the student securely.`);
           </div>
         </div>
         
+        {/* Search Bar */}
+        <div className="mb-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search students by name..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-2 text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+        
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -1403,7 +1434,7 @@ Please share this with the student securely.`);
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {students.map(student => (
+              {filteredStudents.map(student => (
                 <tr key={student.studentId}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {student.studentId}
@@ -1460,38 +1491,24 @@ Please share this with the student securely.`);
               ))}
             </tbody>
           </table>
-          {students.length === 0 && (
+          {filteredStudents.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No students found. Add some to get started.
+              {searchTerm ? `No students found matching "${searchTerm}"` : 'No students found. Add some to get started.'}
             </div>
           )}
         </div>
         
         {/* Template Info */}
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h4 className="font-medium text-blue-900 mb-2">📄 Excel/CSV Upload Template</h4>
-          <p className="text-blue-800 text-sm mb-2">
-            Download and use this template for uploading students:
+        <div className="mt-4">
+          <p className="text-gray-500">
+            <a href="/student-template.csv" download className="text-blue-300 hover:underline">Download template</a>
           </p>
-          <a 
-            href="/student-template.csv" 
-            download 
-            className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Download CSV Template
-          </a>
-          <div className="mt-3 text-xs text-blue-700">
-            <p className="font-medium">Template Format:</p>
-            <p>Columns: studentId, name, class, semester, password</p>
-            <p>• studentId: Optional (auto-generated if empty)</p>
-            <p>• semester: Optional (auto-generated based on class if empty)</p>
-            <p>• password: Optional (auto-generated if empty)</p>
-          </div>
         </div>
       </div>
     </div>
   );
+
+  // ... existing code ...
 
   const renderSchedule = () => (
     <div className="space-y-6">
