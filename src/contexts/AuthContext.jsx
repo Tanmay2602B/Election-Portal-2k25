@@ -162,64 +162,107 @@ export function AuthProvider({ children }) {
 
   // Temporary helper function to add test students (for debugging)
 
-  // Student login (Firestore-based, no Firebase Auth)
-  const loginStudent = async (studentId, password) => {
+  // Login with OTP (for both students and admins)
+  const loginWithOTP = async (userId, phoneNumber, userType = 'student') => {
     try {
-      // Check if user exists in Firestore
-      const userDocRef = doc(db, 'users', studentId);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (!userDoc.exists()) {
-        throw new Error('Student ID not found');
-      }
-      
-      const userData = userDoc.data();
-      
-      // Check password
-      if (userData.password !== password) {
-        throw new Error('Invalid password');
-      }
-      
-      // Check if already voted
-      if (userData.hasVoted) {
-        throw new Error('You have already voted and cannot login again');
-      }
-      
-      // Check if already logged in on another device
-      if (userData.isLoggedIn) {
-        throw new Error('Account is already logged in on another device');
-      }
-      
-      // Check if this specific student has already used this device
-      if (deviceId) {
-        const deviceRef = doc(db, 'devices', `${deviceId}_${studentId}`);
-        const deviceDoc = await getDoc(deviceRef);
+      if (userType === 'student') {
+        // Check if user exists in Firestore
+        const userDocRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userDocRef);
         
-        if (deviceDoc.exists() && deviceDoc.data().used) {
-          throw new Error('You have already used this device for voting');
+        if (!userDoc.exists()) {
+          throw new Error('Student ID not found');
         }
+        
+        const userData = userDoc.data();
+        
+        // Verify phone number matches
+        if (userData.phoneNumber && userData.phoneNumber !== phoneNumber) {
+          throw new Error('Phone number does not match');
+        }
+        
+        // Update phone number if not set
+        if (!userData.phoneNumber) {
+          await updateDoc(userDocRef, {
+            phoneNumber: phoneNumber
+          });
+        }
+        
+        // Check if already voted
+        if (userData.hasVoted) {
+          throw new Error('You have already voted and cannot login again');
+        }
+        
+        // Check if already logged in on another device
+        if (userData.isLoggedIn) {
+          throw new Error('Account is already logged in on another device');
+        }
+        
+        // Check if this specific student has already used this device
+        if (deviceId) {
+          const deviceRef = doc(db, 'devices', `${deviceId}_${userId}`);
+          const deviceDoc = await getDoc(deviceRef);
+          
+          if (deviceDoc.exists() && deviceDoc.data().used) {
+            throw new Error('You have already used this device for voting');
+          }
+        }
+        
+        // Update user login status in Firestore
+        await updateDoc(userDocRef, {
+          isLoggedIn: true,
+          deviceId: deviceId,
+          lastLoginTime: new Date(),
+          phoneNumber: phoneNumber
+        });
+        
+        // Set user profile
+        const studentProfile = {
+          ...userData,
+          phoneNumber: phoneNumber,
+          isStudent: true
+        };
+        setUserProfile(studentProfile);
+        
+        // Set a mock currentUser for students to satisfy routing logic
+        setCurrentUser({ uid: userId, isStudent: true });
+      } else {
+        // Admin login with OTP
+        const adminsQuery = query(collection(db, 'admins'), where('adminId', '==', userId));
+        const adminsSnapshot = await getDocs(adminsQuery);
+        
+        if (adminsSnapshot.empty) {
+          throw new Error('Admin ID not found');
+        }
+        
+        const adminData = adminsSnapshot.docs[0].data();
+        const adminUid = adminsSnapshot.docs[0].id;
+        
+        // Verify phone number matches
+        if (adminData.phoneNumber && adminData.phoneNumber !== phoneNumber) {
+          throw new Error('Phone number does not match');
+        }
+        
+        // Update phone number if not set
+        if (!adminData.phoneNumber) {
+          await updateDoc(doc(db, 'admins', adminUid), {
+            phoneNumber: phoneNumber
+          });
+        }
+        
+        // For admin, we still use Firebase Auth but with a custom token approach
+        // For now, we'll set the profile directly
+        setUserProfile({ ...adminData, phoneNumber: phoneNumber, isAdmin: true });
+        setCurrentUser({ uid: adminUid, isAdmin: true });
       }
-      
-      // Update user login status in Firestore
-      await updateDoc(userDocRef, {
-        isLoggedIn: true,
-        deviceId: deviceId,
-        lastLoginTime: new Date()
-      });
-      
-      // Set user profile (no Firebase Auth needed)
-      const studentProfile = {
-        ...userData,
-        isStudent: true
-      };
-      setUserProfile(studentProfile);
-      
-      // Set a mock currentUser for students to satisfy routing logic
-      setCurrentUser({ uid: studentId, isStudent: true });
-      
     } catch (error) {
       throw error;
     }
+  };
+
+  // Legacy student login (kept for backward compatibility, but deprecated)
+  const loginStudent = async (studentId, password) => {
+    throw new Error('Password login is no longer supported. Please use OTP authentication.');
   };
 
   // Force login for students (clears previous session)
@@ -285,26 +328,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Admin login
+  // Legacy admin login (kept for backward compatibility, but deprecated)
   const loginAdmin = async (email, password) => {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Check if user is admin
-      const adminDocRef = doc(db, 'admins', userCredential.user.uid);
-      const adminDoc = await getDoc(adminDocRef);
-      
-      if (!adminDoc.exists()) {
-        await signOut(auth);
-        throw new Error('Access denied. Admin privileges required.');
-      }
-      
-      setUserProfile({ ...adminDoc.data(), isAdmin: true });
-      return userCredential;
-      
-    } catch (error) {
-      throw error;
-    }
+    throw new Error('Password login is no longer supported. Please use OTP authentication.');
   };
 
   // Logout
@@ -429,6 +455,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     userProfile,
+    loginWithOTP,
     loginStudent,
     forceLoginStudent,
     loginAdmin,
@@ -446,7 +473,16 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }
