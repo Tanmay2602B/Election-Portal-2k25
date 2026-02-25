@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { AlertCircle, Vote, Users, Shield } from 'lucide-react';
+import { AlertCircle, Vote, Users, Shield, Phone, Key, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
+import { sendOTP, verifyOTP } from '../utils/otpUtils';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 function LoginPage() {
   const [isStudentLogin, setIsStudentLogin] = useState(true);
+  const [step, setStep] = useState('phone'); // 'phone' or 'otp'
   const [formData, setFormData] = useState({
+    phoneNumber: '',
     studentId: '',
-    email: '',
-    password: ''
+    adminId: '',
+    otp: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showForceLogin, setShowForceLogin] = useState(false);
-  const { loginStudent, forceLoginStudent, loginAdmin } = useAuth();
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const { loginWithOTP, forceLoginStudent } = useAuth();
+
+  // Countdown timer for OTP resend
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
 
   const handleChange = (e) => {
     setFormData({
@@ -22,52 +36,76 @@ function LoginPage() {
     setError('');
   };
 
-  const handleSubmit = async (e) => {
+  const formatPhoneNumber = (phone) => {
+    // Remove all non-digits
+    const digits = phone.replace(/\D/g, '');
+    // Format as +1234567890 or similar
+    return digits;
+  };
+
+  const handleSendOTP = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
+      const phoneNumber = formatPhoneNumber(formData.phoneNumber);
+      
+      if (!phoneNumber || phoneNumber.length < 10) {
+        throw new Error('Please enter a valid phone number');
+      }
+
       if (isStudentLogin) {
-        if (!formData.studentId || !formData.password) {
-          throw new Error('Please fill in all fields');
+        if (!formData.studentId) {
+          throw new Error('Please enter your Student ID');
         }
-        await loginStudent(formData.studentId, formData.password);
-      } else {
-        if (!formData.email || !formData.password) {
-          throw new Error('Please fill in all fields');
+        
+        // Check if student exists and get their phone number
+        const userDocRef = doc(db, 'users', formData.studentId);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+          throw new Error('Student ID not found');
         }
-        await loginAdmin(formData.email, formData.password);
-      }
-    } catch (error) {
-      if (error.message === 'Student ID not found' && isStudentLogin) {
-        setError('Student ID not found. Please check your credentials or contact the administrator.');
-      } else if (error.message === 'Account is already logged in on another device' && isStudentLogin) {
-        setShowForceLogin(true);
-        setError('Account is already logged in. Click "Force Login" to clear previous session.');
-      } else if (!isStudentLogin && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.message.includes('Access denied'))) {
-        // Admin authentication failed - show a simpler error message
-        setError('Admin account not found. Please contact the system administrator.');
+        
+        const userData = userDoc.data();
+        
+        // Check if phone number matches
+        if (userData.phoneNumber && userData.phoneNumber !== phoneNumber) {
+          throw new Error('Phone number does not match the registered number');
+        }
+        
+        // Send OTP
+        await sendOTP(phoneNumber, formData.studentId, 'student');
+        setOtpSent(true);
+        setStep('otp');
+        setCountdown(60); // 60 seconds countdown
       } else {
-        setError(error.message);
+        if (!formData.adminId) {
+          throw new Error('Please enter your Admin ID');
+        }
+        
+        // Check if admin exists
+        const adminsQuery = query(collection(db, 'admins'), where('adminId', '==', formData.adminId));
+        const adminsSnapshot = await getDocs(adminsQuery);
+        
+        if (adminsSnapshot.empty) {
+          throw new Error('Admin ID not found');
+        }
+        
+        const adminData = adminsSnapshot.docs[0].data();
+        
+        // Check if phone number matches
+        if (adminData.phoneNumber && adminData.phoneNumber !== phoneNumber) {
+          throw new Error('Phone number does not match the registered number');
+        }
+        
+        // Send OTP
+        await sendOTP(phoneNumber, formData.adminId, 'admin');
+        setOtpSent(true);
+        setStep('otp');
+        setCountdown(60);
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForceLogin = async () => {
-    if (!formData.studentId || !formData.password) {
-      setError('Please fill in Student ID and Password first');
-      return;
-    }
-
-    setLoading(true);
-    setError(''); // Clear previous errors
-    
-    try {
-      await forceLoginStudent(formData.studentId, formData.password);
-      setShowForceLogin(false);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -75,18 +113,83 @@ function LoginPage() {
     }
   };
 
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const phoneNumber = formatPhoneNumber(formData.phoneNumber);
+      const otp = formData.otp.trim();
+      
+      if (!otp || otp.length !== 6) {
+        throw new Error('Please enter a valid 6-digit OTP');
+      }
+
+      if (isStudentLogin) {
+        // Verify OTP
+        await verifyOTP(phoneNumber, otp, formData.studentId, 'student');
+        
+        // Login with OTP
+        await loginWithOTP(formData.studentId, phoneNumber, 'student');
+      } else {
+        // Verify OTP
+        await verifyOTP(phoneNumber, otp, formData.adminId, 'admin');
+        
+        // Login with OTP
+        await loginWithOTP(formData.adminId, phoneNumber, 'admin');
+      }
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (countdown > 0) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const phoneNumber = formatPhoneNumber(formData.phoneNumber);
+      
+      if (isStudentLogin) {
+        await sendOTP(phoneNumber, formData.studentId, 'student');
+      } else {
+        await sendOTP(phoneNumber, formData.adminId, 'admin');
+      }
+      
+      setCountdown(60);
+      setError('');
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    setStep('phone');
+    setOtpSent(false);
+    setFormData({ ...formData, otp: '' });
+    setError('');
+    setCountdown(0);
+  };
+
   return (
-    <div className="min-h-screen login-bg flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md card-shadow">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md card-shadow">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-blue-100 p-3 rounded-full">
-              <Vote className="h-8 w-8 text-blue-600" />
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 rounded-full">
+              <Vote className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">
-            Student Council Election
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+            Election Portal
           </h1>
           <p className="text-gray-600">
             {isStudentLogin ? 'Student Portal' : 'Admin Portal'}
@@ -94,40 +197,42 @@ function LoginPage() {
         </div>
 
         {/* Login Type Toggle */}
-        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setIsStudentLogin(true);
-              setFormData({ studentId: '', email: '', password: '' });
-              setError('');
-            }}
-            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              isStudentLogin
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Student
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsStudentLogin(false);
-              setFormData({ studentId: '', email: '', password: '' });
-              setError('');
-            }}
-            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              !isStudentLogin
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Admin
-          </button>
-        </div>
+        {step === 'phone' && (
+          <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsStudentLogin(true);
+                setFormData({ phoneNumber: '', studentId: '', adminId: '', otp: '' });
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                isStudentLogin
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Student
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsStudentLogin(false);
+                setFormData({ phoneNumber: '', studentId: '', adminId: '', otp: '' });
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                !isStudentLogin
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Admin
+            </button>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -137,89 +242,149 @@ function LoginPage() {
           </div>
         )}
 
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isStudentLogin ? (
+        {/* Success Message */}
+        {otpSent && step === 'otp' && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center">
+            <CheckCircle className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" />
+            <span className="text-green-700 text-sm">OTP sent successfully! Check your phone.</span>
+          </div>
+        )}
+
+        {/* Phone Number Form */}
+        {step === 'phone' && (
+          <form onSubmit={handleSendOTP} className="space-y-4">
             <div>
-              <label className="form-label">
-                Student ID
+              <label className="form-label flex items-center">
+                <Phone className="h-4 w-4 mr-2" />
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleChange}
+                className="form-input"
+                placeholder="+1 234 567 8900"
+                required
+              />
+            </div>
+
+            {isStudentLogin ? (
+              <div>
+                <label className="form-label flex items-center">
+                  <Users className="h-4 w-4 mr-2" />
+                  Student ID
+                </label>
+                <input
+                  type="text"
+                  name="studentId"
+                  value={formData.studentId}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Enter your student ID"
+                  required
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="form-label flex items-center">
+                  <Shield className="h-4 w-4 mr-2" />
+                  Admin ID
+                </label>
+                <input
+                  type="text"
+                  name="adminId"
+                  value={formData.adminId}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Enter your admin ID"
+                  required
+                />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Sending OTP...</span>
+                </>
+              ) : (
+                <>
+                  <span>Send OTP</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* OTP Verification Form */}
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyOTP} className="space-y-4">
+            <div>
+              <label className="form-label flex items-center">
+                <Key className="h-4 w-4 mr-2" />
+                Enter OTP
               </label>
               <input
                 type="text"
-                name="studentId"
-                value={formData.studentId}
+                name="otp"
+                value={formData.otp}
                 onChange={handleChange}
-                className="form-input"
-                placeholder="Enter your student ID"
+                className="form-input text-center text-2xl tracking-widest font-mono"
+                placeholder="000000"
+                maxLength="6"
                 required
+                autoFocus
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter the 6-digit code sent to {formData.phoneNumber}
+              </p>
             </div>
-          ) : (
-            <div>
-              <label className="form-label">
-                Admin Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="form-input"
-                placeholder="Enter your admin email"
-                required
-              />
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex-1 btn-secondary"
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Verify OTP</span>
+                    <CheckCircle className="h-4 w-4" />
+                  </>
+                )}
+              </button>
             </div>
-          )}
 
-          <div>
-            <label className="form-label">
-              Password
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              className="form-input"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {loading ? (
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-            ) : (
-              'Login'
-            )}
-          </button>
-        </form>
-
-        {/* Force Login Helper */}
-        {isStudentLogin && showForceLogin && (
-          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center mb-2">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="font-medium text-yellow-800">Session Conflict</span>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleResendOTP}
+                disabled={countdown > 0 || loading}
+                className="text-sm text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+              </button>
             </div>
-            <p className="text-yellow-700 text-sm mb-3">
-              Your account shows as logged in elsewhere. This can happen if the browser was closed without proper logout.
-            </p>
-            <button
-              onClick={handleForceLogin}
-              disabled={loading}
-              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg text-sm font-medium disabled:opacity-50"
-            >
-              {loading ? 'Clearing Session...' : 'Force Login (Clear Previous Session)'}
-            </button>
-            <p className="text-xs text-yellow-600 mt-2">
-              This will clear your previous session and log you in on this device.
-            </p>
-          </div>
+          </form>
         )}
 
         {/* Information */}
@@ -227,14 +392,15 @@ function LoginPage() {
           <div className="text-xs text-gray-500 space-y-1">
             {isStudentLogin ? (
               <>
+                <p>• Secure OTP-based authentication</p>
                 <p>• You can only vote once</p>
                 <p>• One device per student</p>
               </>
             ) : (
               <>
+                <p>• Secure OTP-based authentication</p>
                 <p>• Contact system administrator for admin access</p>
                 <p>• Manage elections, students, and voting schedule</p>
-                <p>• View real-time results and audit logs</p>
               </>
             )}
           </div>

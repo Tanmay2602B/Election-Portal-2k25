@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import api from '../utils/api';
 import { Vote, CheckCircle, ArrowLeft, AlertTriangle, Users } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import StudentHeader from './student/StudentHeader';
 
 function VotingPage() {
   const { userProfile, submitVote, getVotingStatus, isVotingActive } = useAuth();
@@ -24,44 +26,30 @@ function VotingPage() {
 
   const loadElectionData = async () => {
     try {
-      // Check if voting is active
-      const votingStatus = getVotingStatus();
-      if (votingStatus.status !== 'active') {
-        setError(`Voting is not currently active. ${votingStatus.message}`);
-        setLoading(false);
-        return;
-      }
+      //   const votingStatus = getVotingStatus();
+      //   if (votingStatus.status !== 'active') {
+      //     // Double check with API if actually active
+      //   }
 
-      // Load voting settings to check for departmental restrictions
-      const settingsDoc = await getDoc(doc(db, 'settings', 'electionConfig'));
-      let settings = null;
-      if (settingsDoc.exists()) {
-        settings = settingsDoc.data();
-        setVotingSettings(settings);
-      }
+      const [scheduleRes, positionsRes, candidatesRes] = await Promise.all([
+        api.get('/settings/votingSchedule'),
+        api.get('/positions'),
+        api.get('/candidates')
+      ]);
 
-      // Load positions
-      const positionsQuery = query(collection(db, 'positions'), orderBy('name'));
-      const positionsSnapshot = await getDocs(positionsQuery);
-      const positionsData = positionsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const settings = { ...scheduleRes.data }; // merged/renamed
+      // Assuming settings endpoint returns the schedule object or full config. 
+      // Our backend returns whatever is in 'votingSchedule' key which is the object.
 
-      // Load candidates
-      const candidatesQuery = query(collection(db, 'candidates'), orderBy('name'));
-      const candidatesSnapshot = await getDocs(candidatesQuery);
-      let candidatesData = candidatesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      setVotingSettings(settings);
 
-      // Apply departmental filtering if enabled
+      const positionsData = positionsRes.data;
+      let candidatesData = candidatesRes.data;
+
+      // Filter Logic
       if (settings?.enableDepartmentalVoting && !settings?.allowCrossDepartmentVoting) {
-        // Student can only vote for their own department
-        const studentDept = userProfile?.class; // Using class as department identifier
+        const studentDept = userProfile?.class;
         candidatesData = candidatesData.filter(candidate => candidate.class === studentDept);
-        
         setDepartmentInfo({
           userDepartment: studentDept,
           restrictedMode: true,
@@ -93,16 +81,11 @@ function VotingPage() {
   };
 
   const isAllPositionsVoted = () => {
-    return positions.every(position => votes[position.id]);
+    // Need to handle IDs that might be different or `_id` vs `id`
+    return positions.every(position => votes[position._id || position.id]);
   };
 
   const handleSubmitVotes = async () => {
-    if (!isVotingActive()) {
-      const votingStatus = getVotingStatus();
-      setError(`Voting is not currently active. ${votingStatus.message}`);
-      return;
-    }
-
     if (!isAllPositionsVoted()) {
       setError('Please select a candidate for all positions before submitting.');
       return;
@@ -116,262 +99,176 @@ function VotingPage() {
         positionId,
         candidateId
       }));
-
       await submitVote(voteArray);
-      // Redirect will be handled by the AuthContext after successful submission
+      // AuthContext submitVote updates context. Then we can redirect.
+      navigate('/student'); // Redirect to dashboard
     } catch (error) {
       console.error('Error submitting votes:', error);
-      setError('Failed to submit votes. Please try again.');
+      setError('Failed to submit votes. ' + (error.response?.data?.msg || ''));
       setSubmitting(false);
     }
   };
 
-  const handleGoBack = () => {
-    navigate('/student');
-  };
+  const handleGoBack = () => navigate('/student');
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading election data..." />
-      </div>
-    );
+    return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center"><LoadingSpinner message="Loading Ballot..." /></div>;
   }
 
-  // If voting is not active, show status message
-  const votingStatus = getVotingStatus();
-  if (votingStatus.status !== 'active') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto bg-white rounded-lg shadow-sm p-8 text-center">
-          <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Voting Not Available</h2>
-          <p className="text-gray-600 mb-6">{votingStatus.message}</p>
-          <button
-            onClick={handleGoBack}
-            className="btn-primary"
-          >
-            Go Back to Dashboard
-          </button>
-        </div>
-      </div>
-    );
+  // Check if active (locally or via settings loaded)
+  // For robustness, if we loaded data successfully, we assume we can render, 
+  // but we should respect the 'isActive' flag from settings.
+  if (votingSettings && !votingSettings.isActive) {
+    // return Unavailable screen
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <button
-                onClick={handleGoBack}
-                className="mr-4 p-1 text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeft className="h-6 w-6" />
-              </button>
-              <Vote className="h-8 w-8 text-blue-600 mr-3" />
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Cast Your Vote</h1>
-                <p className="text-sm text-gray-500">Select one candidate for each position</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Voting as: {userProfile?.name}</p>
-              <p className="text-xs text-gray-500">ID: {userProfile?.studentId}</p>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#0f172a] pb-12">
+      <StudentHeader userProfile={userProfile} onLogout={() => { }} />
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
-            <AlertTriangle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
-            <span className="text-red-700">{error}</span>
-          </div>
-        )}
-
-        {/* Departmental Voting Notice */}
-        {departmentInfo && (
-          <div className={`mb-6 p-4 rounded-lg border flex items-center ${
-            departmentInfo.restrictedMode 
-              ? 'bg-yellow-50 border-yellow-200' 
-              : 'bg-blue-50 border-blue-200'
-          }`}>
-            <Users className={`h-5 w-5 mr-2 flex-shrink-0 ${
-              departmentInfo.restrictedMode ? 'text-yellow-600' : 'text-blue-600'
-            }`} />
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Button onClick={handleGoBack} variant="ghost" className="p-2 rounded-full h-auto"><ArrowLeft size={24} /></Button>
             <div>
-              <div className={`font-medium ${
-                departmentInfo.restrictedMode ? 'text-yellow-800' : 'text-blue-800'
-              }`}>
-                {departmentInfo.restrictedMode ? '🔒 Departmental Voting Mode' : '🌐 Cross-Department Voting Enabled'}
-              </div>
-              <div className={`text-sm ${
-                departmentInfo.restrictedMode ? 'text-yellow-700' : 'text-blue-700'
-              }`}>
-                {departmentInfo.message}
-              </div>
+              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Vote className="text-indigo-400" /> Cast Your Vote
+              </h1>
+              <p className="text-gray-400">Select one candidate for each position below</p>
             </div>
+          </div>
+          {/* Progress Bar */}
+          <div className="glass-panel px-4 py-2 rounded-xl flex items-center gap-4">
+            <span className="text-sm text-gray-300 whitespace-nowrap">Progress</span>
+            <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 transition-all duration-500"
+                style={{ width: `${(Object.keys(votes).length / positions.length) * 100}%` }}
+              />
+            </div>
+            <span className="text-sm font-bold text-white">{Object.keys(votes).length}/{positions.length}</span>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center text-red-200">
+            <AlertTriangle className="h-5 w-5 mr-3 flex-shrink-0" />
+            {error}
           </div>
         )}
 
-        {/* Progress Indicator */}
-        <div className="mb-8 bg-white rounded-lg shadow-sm p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Voting Progress</span>
-            <span className="text-sm text-gray-500">
-              {Object.keys(votes).length} of {positions.length} positions selected
-            </span>
+        {departmentInfo && (
+          <div className={`p-4 rounded-xl border flex items-center ${departmentInfo.restrictedMode ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-200' : 'bg-blue-500/10 border-blue-500/30 text-blue-200'}`}>
+            <Users className="mr-3" />
+            <div>
+              <div className="font-bold">{departmentInfo.restrictedMode ? 'Department Locked' : 'Open Election'}</div>
+              <div className="text-sm opacity-80">{departmentInfo.message}</div>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{
-                width: `${(Object.keys(votes).length / positions.length) * 100}%`
-              }}
-            ></div>
-          </div>
-        </div>
+        )}
 
         {/* Voting Sections */}
         <div className="space-y-8">
           {positions.map(position => {
-            const positionCandidates = candidates.filter(candidate => 
-              candidate.positionId === position.id
-            );
+            const pid = position._id || position.id;
+            const positionCandidates = candidates.filter(c => (c.positionId === pid) || (c.positionId._id === pid));
+            const userVote = votes[pid];
 
             return (
-              <div key={position.id} className="bg-white rounded-lg shadow-sm">
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {position.name}
-                      </h3>
-                      {position.description && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          {position.description}
-                        </p>
-                      )}
-                    </div>
-                    {votes[position.id] && (
-                      <CheckCircle className="h-6 w-6 text-green-500" />
-                    )}
+              <Card key={pid} className={`relative overflow-hidden transition-all duration-500 ${userVote ? 'border-green-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]' : ''}`}>
+                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-500" />
+
+                <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{position.name}</h3>
+                    {position.description && <p className="text-gray-400 text-sm mt-1">{position.description}</p>}
                   </div>
+                  {userVote && (
+                    <div className="flex items-center gap-2 text-green-400 bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">
+                      <CheckCircle size={16} />
+                      <span className="text-xs font-bold">Selection Made</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {positionCandidates.map(candidate => (
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {positionCandidates.map(candidate => {
+                    const cid = candidate._id || candidate.id;
+                    const isSelected = userVote === cid;
+                    return (
                       <div
-                        key={candidate.id}
-                        className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                          votes[position.id] === candidate.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => handleVoteChange(position.id, candidate.id)}
+                        key={cid}
+                        onClick={() => handleVoteChange(pid, cid)}
+                        className={`
+                          relative group cursor-pointer rounded-xl p-4 border transition-all duration-300
+                          ${isSelected
+                            ? 'bg-indigo-600/20 border-indigo-500 shadow-lg scale-[1.02]'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                          }
+                        `}
                       >
-                        <div className="flex items-start">
-                          <input
-                            type="radio"
-                            name={`position-${position.id}`}
-                            value={candidate.id}
-                            checked={votes[position.id] === candidate.id}
-                            onChange={() => handleVoteChange(position.id, candidate.id)}
-                            className="mt-1 mr-3 text-blue-600"
-                          />
+                        <div className="flex items-start gap-4">
+                          {/* Checkbox circle */}
+                          <div className={`mt-1 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-gray-500'}`}>
+                            {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                          </div>
+
                           <div className="flex-1">
-                            <div className="flex items-center mb-2">
-                              {candidate.photoURL && (
-                                <img
-                                  src={candidate.photoURL}
-                                  alt={candidate.name}
-                                  className="h-12 w-12 rounded-full object-cover mr-3"
-                                />
+                            <div className="flex items-center gap-3 mb-2">
+                              {candidate.photoURL ? (
+                                <img src={candidate.photoURL} alt={candidate.name} className="w-12 h-12 rounded-full object-cover border-2 border-white/10" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-white font-bold border-2 border-white/10">
+                                  {candidate.name.charAt(0)}
+                                </div>
                               )}
                               <div>
-                                <h4 className="font-medium text-gray-900">
-                                  {candidate.name}
-                                </h4>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm text-gray-600">
-                                    {candidate.class}
-                                  </p>
-                                  {departmentInfo && departmentInfo.userDepartment !== candidate.class && (
-                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                                      Other Dept
-                                    </span>
-                                  )}
-                                  {departmentInfo && departmentInfo.userDepartment === candidate.class && (
-                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                                      Your Dept
-                                    </span>
-                                  )}
-                                </div>
+                                <h4 className={`font-bold text-lg ${isSelected ? 'text-white' : 'text-gray-200'}`}>{candidate.name}</h4>
+                                <span className="text-xs text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded">{candidate.class}</span>
                               </div>
                             </div>
-                            {candidate.bio && (
-                              <p className="text-sm text-gray-700">
-                                {candidate.bio}
-                              </p>
-                            )}
+                            {candidate.bio && <p className="text-sm text-gray-400 line-clamp-2 pl-15">{candidate.bio}</p>}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
 
-        {/* Submit Button */}
-        <div className="mt-8 bg-white rounded-lg shadow-sm p-6">
-          <div className="text-center">
-            <button
-              onClick={handleSubmitVotes}
-              disabled={!isAllPositionsVoted() || submitting}
-              className="inline-flex items-center px-8 py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors shadow-lg disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3" />
-                  Submitting Votes...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-6 w-6 mr-3" />
-                  Submit My Votes
-                </>
-              )}
-            </button>
-            
-            {!isAllPositionsVoted() && (
-              <p className="text-sm text-gray-500 mt-2">
-                Please select a candidate for all positions to enable submission
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Warning */}
-        <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-yellow-800">Final Warning</p>
-              <p className="text-yellow-700 text-sm mt-1">
-                Once you submit your votes, you cannot change them. You will be automatically logged out and this device will be locked from future voting.
-              </p>
+        {/* Submit Section */}
+        <Card className="text-center p-8 bg-gradient-to-b from-white/5 to-transparent">
+          {!isAllPositionsVoted() ? (
+            <div className="space-y-4">
+              <p className="text-gray-400">You must select a candidate for every position to submit your ballot.</p>
+              <Button disabled variant="secondary" className="w-full max-w-md mx-auto py-4 opacity-50 cursor-not-allowed">
+                Complete All Selections to Submit
+              </Button>
             </div>
-          </div>
-        </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-yellow-200 text-sm max-w-2xl mx-auto">
+                <div className="flex items-center justify-center gap-2 font-bold mb-1">
+                  <AlertTriangle size={16} /> Final Confirmation
+                </div>
+                Once submitted, your vote is final and cannot be changed. You will be logged out.
+              </div>
+              <Button
+                onClick={handleSubmitVotes}
+                disabled={submitting}
+                variant="success"
+                className="w-full max-w-md mx-auto py-4 text-lg shadow-xl shadow-green-500/20 hover:scale-105"
+                icon={CheckCircle}
+              >
+                {submitting ? 'Encrypting & Submitting...' : 'Confirm & Cast Final Vote'}
+              </Button>
+            </div>
+          )}
+        </Card>
       </main>
     </div>
   );

@@ -73,50 +73,50 @@ function CountdownTimer({ targetTime, status, onTimeUp = () => {} }) {
   const colors = getColorScheme();
 
   return (
-    <div className={`${colors.bg} ${colors.border} border rounded-xl p-6 mb-6`}>
-      <div className="flex items-center mb-4">
-        <Clock className={`h-6 w-6 ${colors.accent} mr-3`} />
-        <h3 className={`text-lg font-bold ${colors.text}`}>
+    <div className={`${colors.bg} ${colors.border} border rounded-xl p-4 sm:p-6 mb-6`}>
+      <div className="flex items-center mb-4 sm:mb-6">
+        <Clock className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.accent} mr-2 sm:mr-3`} />
+        <h3 className={`text-base sm:text-lg font-bold ${colors.text}`}>
           {status === 'not_started' ? '⏰ Voting Starts In:' : '⚡ Voting Ends In:'}
         </h3>
       </div>
       
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-2 sm:gap-4">
         <div className="text-center">
-          <div className={`text-3xl font-bold ${colors.text} bg-white rounded-lg py-3 px-2 shadow-sm border`}>
+          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
             {days.toString().padStart(2, '0')}
           </div>
-          <div className={`text-sm font-medium ${colors.text} mt-2`}>Days</div>
+          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Days</div>
         </div>
         <div className="text-center">
-          <div className={`text-3xl font-bold ${colors.text} bg-white rounded-lg py-3 px-2 shadow-sm border`}>
+          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
             {hours.toString().padStart(2, '0')}
           </div>
-          <div className={`text-sm font-medium ${colors.text} mt-2`}>Hours</div>
+          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Hours</div>
         </div>
         <div className="text-center">
-          <div className={`text-3xl font-bold ${colors.text} bg-white rounded-lg py-3 px-2 shadow-sm border`}>
+          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
             {minutes.toString().padStart(2, '0')}
           </div>
-          <div className={`text-sm font-medium ${colors.text} mt-2`}>Minutes</div>
+          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Minutes</div>
         </div>
         <div className="text-center">
-          <div className={`text-3xl font-bold ${colors.text} bg-white rounded-lg py-3 px-2 shadow-sm border`}>
+          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
             {seconds.toString().padStart(2, '0')}
           </div>
-          <div className={`text-sm font-medium ${colors.text} mt-2`}>Seconds</div>
+          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Seconds</div>
         </div>
       </div>
       
       {status === 'not_started' && (
-        <div className={`mt-4 text-center ${colors.text}`}>
-          <p className="text-sm">Get ready to cast your vote when the time comes!</p>
+        <div className={`mt-3 sm:mt-4 text-center ${colors.text}`}>
+          <p className="text-xs sm:text-sm">Get ready to cast your vote when the time comes!</p>
         </div>
       )}
       
       {status === 'active' && (
-        <div className={`mt-4 text-center ${colors.text}`}>
-          <p className="text-sm font-medium">⚠️ Don't wait too long - make sure to submit your vote!</p>
+        <div className={`mt-3 sm:mt-4 text-center ${colors.text}`}>
+          <p className="text-xs sm:text-sm font-medium">⚠️ Don't wait too long - make sure to submit your vote!</p>
         </div>
       )}
     </div>
