@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock } from 'lucide-react';
 
-function CountdownTimer({ targetTime, status, onTimeUp = () => {} }) {
+function CountdownTimer({ targetTime, status, onTimeUp = () => { } }) {
   const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
@@ -11,7 +11,7 @@ function CountdownTimer({ targetTime, status, onTimeUp = () => {} }) {
       const now = new Date().getTime();
       const target = typeof targetTime === 'string' ? new Date(targetTime).getTime() : targetTime;
       const difference = target - now;
-      
+
       if (difference > 0) {
         setTimeLeft(difference);
       } else {
@@ -20,105 +20,53 @@ function CountdownTimer({ targetTime, status, onTimeUp = () => {} }) {
       }
     };
 
-    // Calculate immediately
     calculateTimeLeft();
-
-    // Update every second
     const timer = setInterval(calculateTimeLeft, 1000);
-
     return () => clearInterval(timer);
   }, [targetTime, onTimeUp]);
 
   const formatTime = (milliseconds) => {
-    if (milliseconds <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+    if (milliseconds <= 0) return '00:00:00';
 
-    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((milliseconds % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const hours = Math.floor(milliseconds / (1000 * 60 * 60));
     const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
 
-    return { days, hours, minutes, seconds };
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
   };
 
-  const { days, hours, minutes, seconds } = formatTime(timeLeft);
-
-  if (timeLeft <= 0) {
+  if (timeLeft <= 0 && status !== 'not_started') {
     return null;
   }
 
-  const getColorScheme = () => {
-    if (status === 'not_started') {
-      return {
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
-        text: 'text-blue-900',
-        accent: 'text-blue-600'
-      };
-    } else if (status === 'active') {
-      return {
-        bg: 'bg-orange-50',
-        border: 'border-orange-200',
-        text: 'text-orange-900',
-        accent: 'text-orange-600'
-      };
-    }
-    return {
-      bg: 'bg-gray-50',
-      border: 'border-gray-200',
-      text: 'text-gray-900',
-      accent: 'text-gray-600'
-    };
-  };
-
-  const colors = getColorScheme();
+  const isWarning = status === 'active' && timeLeft < 3600000; // Less than 1 hour
 
   return (
-    <div className={`${colors.bg} ${colors.border} border rounded-xl p-4 sm:p-6 mb-6`}>
-      <div className="flex items-center mb-4 sm:mb-6">
-        <Clock className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.accent} mr-2 sm:mr-3`} />
-        <h3 className={`text-base sm:text-lg font-bold ${colors.text}`}>
-          {status === 'not_started' ? '⏰ Voting Starts In:' : '⚡ Voting Ends In:'}
-        </h3>
-      </div>
-      
-      <div className="grid grid-cols-4 gap-2 sm:gap-4">
-        <div className="text-center">
-          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
-            {days.toString().padStart(2, '0')}
+    <div className={`glass-card rounded-2xl p-6 sm:p-8 mb-6 relative overflow-hidden ${isWarning ? 'border-red-500/30' : 'border-indigo-500/20'}`}>
+      <div className={`absolute top-0 w-full h-1 left-0 ${isWarning ? 'bg-red-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}`}></div>
+
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-xl ${isWarning ? 'bg-red-500/10 text-red-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
+            <Clock size={24} className={isWarning ? 'animate-pulse' : ''} />
           </div>
-          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Days</div>
+          <div>
+            <h3 className="text-lg font-medium text-white">
+              {status === 'not_started' ? 'Voting Starts In' : 'Voting Ends In'}
+            </h3>
+            <p className="text-sm text-gray-400">
+              {status === 'active' ? 'Make sure to cast your vote before time runs out.' : 'The election will begin soon. Be ready!'}
+            </p>
+          </div>
         </div>
-        <div className="text-center">
-          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
-            {hours.toString().padStart(2, '0')}
-          </div>
-          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Hours</div>
-        </div>
-        <div className="text-center">
-          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
-            {minutes.toString().padStart(2, '0')}
-          </div>
-          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Minutes</div>
-        </div>
-        <div className="text-center">
-          <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${colors.text} bg-white rounded-lg py-2 sm:py-3 px-1 sm:px-2 shadow-sm border`}>
-            {seconds.toString().padStart(2, '0')}
-          </div>
-          <div className={`text-xs sm:text-sm font-medium ${colors.text} mt-1 sm:mt-2`}>Seconds</div>
+
+        <div className="flex items-baseline gap-2 bg-white/5 border border-white/10 px-6 py-3 rounded-xl font-mono">
+          <span className={`text-4xl sm:text-5xl font-bold tracking-tight ${isWarning ? 'text-red-400' : 'text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400'}`}>
+            {formatTime(timeLeft)}
+          </span>
         </div>
       </div>
-      
-      {status === 'not_started' && (
-        <div className={`mt-3 sm:mt-4 text-center ${colors.text}`}>
-          <p className="text-xs sm:text-sm">Get ready to cast your vote when the time comes!</p>
-        </div>
-      )}
-      
-      {status === 'active' && (
-        <div className={`mt-3 sm:mt-4 text-center ${colors.text}`}>
-          <p className="text-xs sm:text-sm font-medium">⚠️ Don't wait too long - make sure to submit your vote!</p>
-        </div>
-      )}
     </div>
   );
 }

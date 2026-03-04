@@ -1,0 +1,29 @@
+[33mYou are using Node.js 22.11.0. Vite requires Node.js version 20.19+ or 22.12+. Please upgrade your Node.js version.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[31m✗[39m Build failed in 9.49s
+[31merror during build:
+[31msrc/utils/electionUtils.js (2:9): "db" is not exported by "src/firebase.js", imported by "src/utils/electionUtils.js".[31m
+file: [36mE:/election-portaltab/src/utils/electionUtils.js:2:9[31m
+[33m
+1: import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+2: import { db } from '../firebase';
+            ^
+3: 
+4: /**
+[31m
+    at getRollupError (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at Module.error (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:16960:16)
+    at Module.traceVariable (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:17412:29)
+    at ModuleScope.findVariable (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:15082:39)
+    at FunctionScope.findVariable (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at FunctionBodyScope.findVariable (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at BlockScope.findVariable (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at Identifier.bind (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:5413:40)
+    at CallExpression.bind (file:///E:/election-portaltab/node_modules/rollup/dist/es/shared/node-entry.js:2800:28)[39m
+\n[36mvite v7.1.6 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 2548 modules transformed.

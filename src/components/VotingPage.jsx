@@ -19,6 +19,20 @@ function VotingPage() {
   const [error, setError] = useState('');
   const [votingSettings, setVotingSettings] = useState(null);
   const [departmentInfo, setDepartmentInfo] = useState(null);
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState(12);
+
+  useEffect(() => {
+    let timer;
+    if (voteSubmitted && redirectCountdown > 0) {
+      timer = setInterval(() => {
+        setRedirectCountdown((prev) => prev - 1);
+      }, 1000);
+    } else if (voteSubmitted && redirectCountdown === 0) {
+      navigate('/student'); // Or home, but auth might log them out
+    }
+    return () => clearInterval(timer);
+  }, [voteSubmitted, redirectCountdown, navigate]);
 
   useEffect(() => {
     loadElectionData();
@@ -100,8 +114,7 @@ function VotingPage() {
         candidateId
       }));
       await submitVote(voteArray);
-      // AuthContext submitVote updates context. Then we can redirect.
-      navigate('/student'); // Redirect to dashboard
+      setVoteSubmitted(true);
     } catch (error) {
       console.error('Error submitting votes:', error);
       setError('Failed to submit votes. ' + (error.response?.data?.msg || ''));
@@ -118,8 +131,56 @@ function VotingPage() {
   // Check if active (locally or via settings loaded)
   // For robustness, if we loaded data successfully, we assume we can render, 
   // but we should respect the 'isActive' flag from settings.
-  if (votingSettings && !votingSettings.isActive) {
-    // return Unavailable screen
+  if (votingSettings && (!votingSettings.isActive || getVotingStatus().status === 'ended' || getVotingStatus().status === 'not_started')) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center p-8 border-red-500/30 bg-red-500/10">
+          <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Voting Closed</h2>
+          <p className="text-red-200">The election is currently not active. Return to the dashboard.</p>
+          <Button onClick={handleGoBack} className="mt-6 w-full py-3">Return to Dashboard</Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (voteSubmitted) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4">
+        <div className="max-w-lg w-full glass-card p-12 text-center relative overflow-hidden animate-scale-in">
+          <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent"></div>
+
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-8 border border-green-500/30 animate-float">
+              <CheckCircle className="w-12 h-12 text-green-400" />
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+              Thank You for Voting
+            </h1>
+
+            <p className="text-xl text-green-300 mb-2 font-medium animate-fade-in" style={{ animationDelay: '0.4s' }}>
+              Your vote has been securely recorded.
+            </p>
+
+            <p className="text-gray-400 mb-10 animate-fade-in" style={{ animationDelay: '0.5s' }}>
+              Thank you for participating in the election.
+            </p>
+
+            <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden mb-6">
+              <div
+                className="h-full bg-green-500 transition-all duration-1000 ease-linear"
+                style={{ width: `${(redirectCountdown / 12) * 100}%` }}
+              ></div>
+            </div>
+
+            <p className="text-sm text-gray-500 animate-pulse">
+              Redirecting to home page in {redirectCountdown} seconds...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

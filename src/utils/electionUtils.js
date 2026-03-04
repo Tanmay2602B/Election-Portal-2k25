@@ -1,5 +1,4 @@
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import api from './api';
 
 /**
  * Fetch last election winners
@@ -7,42 +6,30 @@ import { db } from '../firebase';
  */
 export async function getLastElectionWinners() {
   try {
-    // Get all positions
-    const positionsQuery = query(collection(db, 'positions'), orderBy('name'));
-    const positionsSnapshot = await getDocs(positionsQuery);
-    const positions = positionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const [positionsRes, candidatesRes, votesRes] = await Promise.all([
+      api.get('/positions'),
+      api.get('/candidates'),
+      api.get('/votes')
+    ]);
 
-    // Get all candidates
-    const candidatesQuery = query(collection(db, 'candidates'), orderBy('name'));
-    const candidatesSnapshot = await getDocs(candidatesQuery);
-    const candidates = candidatesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Get all votes
-    const votesQuery = query(collection(db, 'votes'), orderBy('timestamp', 'desc'));
-    const votesSnapshot = await getDocs(votesQuery);
-    const votes = votesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const positions = positionsRes.data || [];
+    const candidates = candidatesRes.data || [];
+    const votes = votesRes.data || [];
 
     // Calculate winners for each position
     const winners = positions.map(position => {
-      const positionVotes = votes.filter(vote => vote.positionId === position.id);
-      const positionCandidates = candidates.filter(c => c.positionId === position.id);
-      
+      const positionId = position._id || position.id;
+      const positionVotes = votes.filter(vote => vote.positionId === positionId);
+      const positionCandidates = candidates.filter(c => c.positionId === positionId);
+
       // Count votes per candidate
       const candidateVoteCounts = positionCandidates.map(candidate => {
-        const candidateVotes = positionVotes.filter(vote => vote.candidateId === candidate.id);
+        const candidateId = candidate._id || candidate.id;
+        const candidateVotes = positionVotes.filter(vote => vote.candidateId === candidateId);
         return {
           candidate: candidate,
           votes: candidateVotes.length,
-          percentage: positionVotes.length > 0 
+          percentage: positionVotes.length > 0
             ? ((candidateVotes.length / positionVotes.length) * 100).toFixed(1)
             : 0
         };
@@ -71,18 +58,14 @@ export async function getLastElectionWinners() {
   }
 }
 
-import { doc, getDoc } from 'firebase/firestore';
-
 /**
  * Get upcoming elections from voting schedule
  */
 export async function getUpcomingElections() {
   try {
-    const scheduleDocRef = doc(db, 'settings', 'electionConfig');
-    const scheduleDoc = await getDoc(scheduleDocRef);
-    
-    if (scheduleDoc.exists()) {
-      return scheduleDoc.data();
+    const res = await api.get('/settings/votingSchedule');
+    if (res.data) {
+      return res.data;
     }
     return null;
   } catch (error) {

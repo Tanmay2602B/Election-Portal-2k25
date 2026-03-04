@@ -11,81 +11,71 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { currentUser, userProfile } = useAuth();
-  
+
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
-  
+
   if (adminOnly && (!userProfile || !userProfile.isAdmin)) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return children;
 }
 
 function AppRoutes() {
   const { currentUser, userProfile } = useAuth();
-  
+
   return (
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
-      <Route 
-        path="/login" 
+      <Route
+        path="/login"
         element={
-          currentUser 
-            ? <Navigate to={userProfile?.isAdmin ? "/admin" : "/student"} replace /> 
+          currentUser
+            ? <Navigate to={userProfile?.isAdmin ? "/admin" : "/student"} replace />
             : <LoginPage />
-        } 
+        }
       />
-      
+
       {/* Protected Admin Routes - Must be logged in AND be admin */}
-      <Route 
-        path="/admin" 
+      <Route
+        path="/admin"
         element={
           <ProtectedRoute adminOnly>
             <AdminDashboard />
           </ProtectedRoute>
-        } 
+        }
       />
-      
+
       {/* Protected Student Routes - Must be logged in AND be student */}
-      <Route 
-        path="/student" 
+      <Route
+        path="/student"
         element={
           <ProtectedRoute>
-            {userProfile?.hasVoted ? (
-              <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-                  <h2 className="text-2xl font-bold text-green-600 mb-4">Vote Submitted Successfully!</h2>
-                  <p className="text-gray-600">Thank you for participating in the election.</p>
-                  <p className="text-sm text-gray-500 mt-2">You have been automatically logged out.</p>
-                </div>
-              </div>
-            ) : (
-              <StudentDashboard />
-            )}
+            <StudentDashboard />
           </ProtectedRoute>
-        } 
+        }
       />
-      
-      <Route 
-        path="/vote" 
+
+      <Route
+        path="/vote"
         element={
           <ProtectedRoute>
             <VotingPage />
           </ProtectedRoute>
-        } 
+        }
       />
-      
+
       {/* Default redirects */}
-      <Route 
-        path="*" 
+      <Route
+        path="*"
         element={
-          currentUser 
+          currentUser
             ? <Navigate to={userProfile?.isAdmin ? "/admin" : "/student"} replace />
             : <Navigate to="/" replace />
-        } 
+        }
       />
     </Routes>
   );
