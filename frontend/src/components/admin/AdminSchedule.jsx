@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Calendar, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -11,7 +11,7 @@ const AdminSchedule = ({
     saving,
     saveStatus,
     formatDuration,
-    getTimeRemaining,
+
     handleStartVoting,
     handleEndVoting,
     loadData
@@ -133,8 +133,8 @@ const AdminSchedule = ({
                         </div>
 
                         <div className={`p-6 rounded-2xl mb-6 text-center border ${votingSchedule.isActive
-                                ? 'bg-green-500/10 border-green-500/20'
-                                : 'bg-red-500/10 border-red-500/20'
+                            ? 'bg-green-500/10 border-green-500/20'
+                            : 'bg-red-500/10 border-red-500/20'
                             }`}>
                             <div className={`w-4 h-4 rounded-full mx-auto mb-3 ${votingSchedule.isActive ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                                 }`} />

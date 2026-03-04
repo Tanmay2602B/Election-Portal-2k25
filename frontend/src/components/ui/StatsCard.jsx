@@ -1,6 +1,7 @@
 import React from 'react';
 import Card from './Card';
 
+// eslint-disable-next-line no-unused-vars
 const StatsCard = ({ title, value, icon: Icon, color = "indigo", subtext }) => {
     const colorStyles = {
         indigo: "from-indigo-500 to-purple-500",

@@ -13,12 +13,12 @@ function UpcomingElection({ isAdmin = false, onScheduleSave = null }) {
   const handleRefresh = async () => {
     setRefreshing(true);
     setRefreshMessage('');
-    
+
     try {
       await refreshVotingSchedule();
       setRefreshMessage('✅ Schedule refreshed successfully!');
       setTimeout(() => setRefreshMessage(''), 3000);
-    } catch (error) {
+    } catch {
       setRefreshMessage('❌ Failed to refresh schedule');
       setTimeout(() => setRefreshMessage(''), 3000);
     } finally {
@@ -132,7 +132,7 @@ function UpcomingElection({ isAdmin = false, onScheduleSave = null }) {
                   {formatDateTime(votingSchedule.votingStart)}
                 </p>
               </div>
-              
+
               <div className="bg-red-50 rounded-lg p-4">
                 <div className="flex items-center mb-2">
                   <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
@@ -152,16 +152,16 @@ function UpcomingElection({ isAdmin = false, onScheduleSave = null }) {
                     <span className="font-semibold text-purple-900">Election Duration</span>
                     <p className="text-purple-800 text-sm">
                       {(() => {
-                        const start = votingSchedule.votingStart.seconds 
-                          ? new Date(votingSchedule.votingStart.seconds * 1000) 
+                        const start = votingSchedule.votingStart.seconds
+                          ? new Date(votingSchedule.votingStart.seconds * 1000)
                           : new Date(votingSchedule.votingStart);
-                        const end = votingSchedule.votingEnd.seconds 
-                          ? new Date(votingSchedule.votingEnd.seconds * 1000) 
+                        const end = votingSchedule.votingEnd.seconds
+                          ? new Date(votingSchedule.votingEnd.seconds * 1000)
                           : new Date(votingSchedule.votingEnd);
                         const hours = Math.round((end - start) / (1000 * 60 * 60));
                         const days = Math.floor(hours / 24);
                         const remainingHours = hours % 24;
-                        
+
                         if (days > 0) {
                           return `${days} day${days > 1 ? 's' : ''} ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
                         }
@@ -180,7 +180,7 @@ function UpcomingElection({ isAdmin = false, onScheduleSave = null }) {
 
             {/* Countdown Timer */}
             {votingStatus.countdown && votingStatus.timeRemaining > 0 && (
-              <CountdownTimer 
+              <CountdownTimer
                 targetTime={votingStatus.status === 'not_started' ? votingStatus.startTime : votingStatus.endTime}
                 status={votingStatus.status}
                 onTimeUp={handleRefresh}
@@ -195,7 +195,7 @@ function UpcomingElection({ isAdmin = false, onScheduleSave = null }) {
                   <div>
                     <h4 className="font-medium text-yellow-800">Departmental Voting Mode</h4>
                     <p className="text-yellow-700 text-sm mt-1">
-                      {votingSchedule.allowCrossDepartmentVoting 
+                      {votingSchedule.allowCrossDepartmentVoting
                         ? 'Students can vote for all departments including their own.'
                         : 'Students cannot vote for their own department - cross-department voting only.'}
                     </p>

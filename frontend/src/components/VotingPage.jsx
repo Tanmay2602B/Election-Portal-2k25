@@ -9,7 +9,7 @@ import Button from './ui/Button';
 import StudentHeader from './student/StudentHeader';
 
 function VotingPage() {
-  const { userProfile, submitVote, getVotingStatus, isVotingActive } = useAuth();
+  const { userProfile, submitVote, getVotingStatus } = useAuth();
   const navigate = useNavigate();
   const [positions, setPositions] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -36,6 +36,7 @@ function VotingPage() {
 
   useEffect(() => {
     loadElectionData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadElectionData = async () => {

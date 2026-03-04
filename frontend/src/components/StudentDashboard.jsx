@@ -13,6 +13,7 @@ function StudentDashboard() {
   const { userProfile, logout, getVotingStatus, isVotingActive, checkVotingSchedule, getTotalPositions, getPositions } = useAuth();
   const navigate = useNavigate();
   const [totalPositions, setTotalPositions] = useState(0);
+  // eslint-disable-next-line no-unused-vars
   const [positions, setPositions] = useState([]);
   const [votingCredits, setVotingCredits] = useState(0);
   const [usedCredits, setUsedCredits] = useState(0);
@@ -25,6 +26,7 @@ function StudentDashboard() {
 
   useEffect(() => {
     initializeDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initializeDashboard = async () => {

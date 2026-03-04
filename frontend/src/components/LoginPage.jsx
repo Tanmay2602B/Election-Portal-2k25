@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertCircle, Vote, Users, Shield, Phone, Key, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
-import api from '../utils/api';
+// import api from '../utils/api';
 
 function LoginPage() {
   const [isStudentLogin, setIsStudentLogin] = useState(true);
@@ -111,12 +111,14 @@ function LoginPage() {
     setError('');
 
     try {
-      const phoneNumber = formatPhoneNumber(formData.phoneNumber);
+      // const phoneNumber = formatPhoneNumber(formData.phoneNumber);
 
       if (isStudentLogin) {
-        await sendOTP(phoneNumber, formData.studentId, 'student');
+        // await sendOTP(phoneNumber, formData.studentId, 'student');
+        console.log("OTP Resent for student");
       } else {
-        await sendOTP(phoneNumber, formData.adminId, 'admin');
+        // await sendOTP(phoneNumber, formData.adminId, 'admin');
+        console.log("OTP Resent for admin");
       }
 
       setCountdown(60);

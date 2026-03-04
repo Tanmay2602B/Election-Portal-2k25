@@ -17,12 +17,12 @@ const AdminManage = ({
     handleDeleteAllStudents,
     handleResetAllPasswords,
     exportCredentials,
-    exportStudentsBySemester,
+    // exportStudentsBySemester,
     handleUploadStudents,
     loadData
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterClass, setFilterClass] = useState('All');
+
 
     // Filter students
     const filteredStudents = students.filter(student => {

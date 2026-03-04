@@ -13,7 +13,7 @@ import AdminResults from './admin/AdminResults';
 import AdminModal from './admin/AdminModal';
 
 const AdminDashboard = () => {
-  const { logout, userProfile } = useAuth();
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
@@ -304,7 +304,7 @@ const AdminDashboard = () => {
             password: row.password || 'password123'
           });
           count++;
-        } catch (e) { console.log("Skip duplicate"); }
+        } catch { console.log("Skip duplicate"); }
       }
       loadData();
       alert(`Imported ${count} students.`);

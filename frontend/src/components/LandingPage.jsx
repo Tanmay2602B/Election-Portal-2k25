@@ -31,6 +31,7 @@ function LandingPage() {
   const navigate = useNavigate();
   const { userProfile, currentUser } = useAuth();
   const [winners, setWinners] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [upcomingElection, setUpcomingElection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [votingStatus, setVotingStatus] = useState(null);
