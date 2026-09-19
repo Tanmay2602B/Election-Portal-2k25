@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Let Render generate its own Linux-compatible lockfile
+package-lock.json
