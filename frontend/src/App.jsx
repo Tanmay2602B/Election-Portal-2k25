@@ -6,8 +6,10 @@ import LoginPage from './components/LoginPage';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import VotingPage from './components/VotingPage';
-import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
+
+// Helper — works with both the JWT payload shape { role } and the DB shape { role }
+const isAdmin = (profile) => profile?.role === 'admin';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { currentUser, userProfile } = useAuth();
@@ -16,8 +18,8 @@ function ProtectedRoute({ children, adminOnly = false }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (adminOnly && (!userProfile || !userProfile.isAdmin)) {
-    return <Navigate to="/login" replace />;
+  if (adminOnly && !isAdmin(userProfile)) {
+    return <Navigate to="/student" replace />;
   }
 
   return children;
@@ -34,12 +36,12 @@ function AppRoutes() {
         path="/login"
         element={
           currentUser
-            ? <Navigate to={userProfile?.isAdmin ? "/admin" : "/student"} replace />
+            ? <Navigate to={isAdmin(userProfile) ? "/admin" : "/student"} replace />
             : <LoginPage />
         }
       />
 
-      {/* Protected Admin Routes - Must be logged in AND be admin */}
+      {/* Protected Admin Route */}
       <Route
         path="/admin"
         element={
@@ -49,7 +51,7 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected Student Routes - Must be logged in AND be student */}
+      {/* Protected Student Route */}
       <Route
         path="/student"
         element={
@@ -68,12 +70,12 @@ function AppRoutes() {
         }
       />
 
-      {/* Default redirects */}
+      {/* Catch-all redirect */}
       <Route
         path="*"
         element={
           currentUser
-            ? <Navigate to={userProfile?.isAdmin ? "/admin" : "/student"} replace />
+            ? <Navigate to={isAdmin(userProfile) ? "/admin" : "/student"} replace />
             : <Navigate to="/" replace />
         }
       />
