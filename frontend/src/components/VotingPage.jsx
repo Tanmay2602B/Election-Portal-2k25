@@ -9,7 +9,7 @@ import Button from './ui/Button';
 import StudentHeader from './student/StudentHeader';
 
 function VotingPage() {
-  const { userProfile, submitVote, getVotingStatus } = useAuth();
+  const { userProfile, submitVote, getVotingStatus, logout } = useAuth();
   const navigate = useNavigate();
   const [positions, setPositions] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -20,8 +20,17 @@ function VotingPage() {
   const [votingSettings, setVotingSettings] = useState(null);
   const [departmentInfo, setDepartmentInfo] = useState(null);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
-  const [redirectCountdown, setRedirectCountdown] = useState(12);
+  const [redirectCountdown, setRedirectCountdown] = useState(8);
 
+  // Guard: if the user has already voted, log them out immediately.
+  useEffect(() => {
+    if (!loading && userProfile?.hasVoted) {
+      logout();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, userProfile]);
+
+  // Countdown → logout (not just navigate) after vote is cast
   useEffect(() => {
     let timer;
     if (voteSubmitted && redirectCountdown > 0) {
@@ -29,10 +38,12 @@ function VotingPage() {
         setRedirectCountdown((prev) => prev - 1);
       }, 1000);
     } else if (voteSubmitted && redirectCountdown === 0) {
-      navigate('/student'); // Or home, but auth might log them out
+      // Hard logout — session is over, one-time-use enforced
+      logout();
     }
     return () => clearInterval(timer);
-  }, [voteSubmitted, redirectCountdown, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voteSubmitted, redirectCountdown]);
 
   useEffect(() => {
     loadElectionData();
@@ -41,30 +52,22 @@ function VotingPage() {
 
   const loadElectionData = async () => {
     try {
-      //   const votingStatus = getVotingStatus();
-      //   if (votingStatus.status !== 'active') {
-      //     // Double check with API if actually active
-      //   }
-
       const [scheduleRes, positionsRes, candidatesRes] = await Promise.all([
         api.get('/settings/votingSchedule'),
         api.get('/positions'),
         api.get('/candidates')
       ]);
 
-      const settings = { ...scheduleRes.data }; // merged/renamed
-      // Assuming settings endpoint returns the schedule object or full config. 
-      // Our backend returns whatever is in 'votingSchedule' key which is the object.
-
+      const settings = { ...scheduleRes.data };
       setVotingSettings(settings);
 
       const positionsData = positionsRes.data;
       let candidatesData = candidatesRes.data;
 
-      // Filter Logic
+      // Departmental filter logic
       if (settings?.enableDepartmentalVoting && !settings?.allowCrossDepartmentVoting) {
         const studentDept = userProfile?.class;
-        candidatesData = candidatesData.filter(candidate => candidate.class === studentDept);
+        candidatesData = candidatesData.filter(c => c.class === studentDept);
         setDepartmentInfo({
           userDepartment: studentDept,
           restrictedMode: true,
@@ -80,8 +83,8 @@ function VotingPage() {
 
       setPositions(positionsData);
       setCandidates(candidatesData);
-    } catch (error) {
-      console.error('Error loading election data:', error);
+    } catch (err) {
+      console.error('Error loading election data:', err);
       setError('Failed to load election data. Please try again.');
     } finally {
       setLoading(false);
@@ -89,15 +92,11 @@ function VotingPage() {
   };
 
   const handleVoteChange = (positionId, candidateId) => {
-    setVotes(prev => ({
-      ...prev,
-      [positionId]: candidateId
-    }));
+    setVotes(prev => ({ ...prev, [positionId]: candidateId }));
   };
 
   const isAllPositionsVoted = () => {
-    // Need to handle IDs that might be different or `_id` vs `id`
-    return positions.every(position => votes[position._id || position.id]);
+    return positions.every(p => votes[p._id || p.id]);
   };
 
   const handleSubmitVotes = async () => {
@@ -116,9 +115,9 @@ function VotingPage() {
       }));
       await submitVote(voteArray);
       setVoteSubmitted(true);
-    } catch (error) {
-      console.error('Error submitting votes:', error);
-      setError('Failed to submit votes. ' + (error.response?.data?.msg || ''));
+    } catch (err) {
+      console.error('Error submitting votes:', err);
+      setError('Failed to submit votes. ' + (err.response?.data?.msg || ''));
       setSubmitting(false);
     }
   };
@@ -126,13 +125,15 @@ function VotingPage() {
   const handleGoBack = () => navigate('/student');
 
   if (loading) {
-    return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center"><LoadingSpinner message="Loading Ballot..." /></div>;
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
+        <LoadingSpinner message="Loading Ballot..." />
+      </div>
+    );
   }
 
-  // Check if active (locally or via settings loaded)
-  // For robustness, if we loaded data successfully, we assume we can render, 
-  // but we should respect the 'isActive' flag from settings.
-  if (votingSettings && (!votingSettings.isActive || getVotingStatus().status === 'ended' || getVotingStatus().status === 'not_started')) {
+  // Voting window is not currently active
+  if (votingSettings && (!votingSettings.isActive || ['ended', 'not_started'].includes(getVotingStatus().status))) {
     return (
       <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center p-8 border-red-500/30 bg-red-500/10">
@@ -145,11 +146,12 @@ function VotingPage() {
     );
   }
 
+  // Vote successfully submitted — countdown then logout
   if (voteSubmitted) {
     return (
       <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4">
         <div className="max-w-lg w-full glass-card p-12 text-center relative overflow-hidden animate-scale-in">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent" />
 
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-8 border border-green-500/30 animate-float">
@@ -165,18 +167,19 @@ function VotingPage() {
             </p>
 
             <p className="text-gray-400 mb-10 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-              Thank you for participating in the election.
+              Your session will be closed for security. You cannot vote again.
             </p>
 
+            {/* Progress bar tied to countdown (8 seconds) */}
             <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden mb-6">
               <div
                 className="h-full bg-green-500 transition-all duration-1000 ease-linear"
-                style={{ width: `${(redirectCountdown / 12) * 100}%` }}
-              ></div>
+                style={{ width: `${(redirectCountdown / 8) * 100}%` }}
+              />
             </div>
 
             <p className="text-sm text-gray-500 animate-pulse">
-              Redirecting to home page in {redirectCountdown} seconds...
+              Signing you out in {redirectCountdown} seconds...
             </p>
           </div>
         </div>
@@ -184,15 +187,19 @@ function VotingPage() {
     );
   }
 
+  const totalPositions = positions.length || 1; // Guard against division by zero
+
   return (
     <div className="min-h-screen bg-[#0f172a] pb-12">
-      <StudentHeader userProfile={userProfile} onLogout={() => { }} />
+      <StudentHeader userProfile={userProfile} onLogout={() => {}} />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in space-y-8">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
-            <Button onClick={handleGoBack} variant="ghost" className="p-2 rounded-full h-auto"><ArrowLeft size={24} /></Button>
+            <Button onClick={handleGoBack} variant="ghost" className="p-2 rounded-full h-auto">
+              <ArrowLeft size={24} />
+            </Button>
             <div>
               <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                 <Vote className="text-indigo-400" /> Cast Your Vote
@@ -206,7 +213,7 @@ function VotingPage() {
             <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-indigo-500 transition-all duration-500"
-                style={{ width: `${(Object.keys(votes).length / positions.length) * 100}%` }}
+                style={{ width: `${(Object.keys(votes).length / totalPositions) * 100}%` }}
               />
             </div>
             <span className="text-sm font-bold text-white">{Object.keys(votes).length}/{positions.length}</span>
@@ -222,7 +229,7 @@ function VotingPage() {
 
         {departmentInfo && (
           <div className={`p-4 rounded-xl border flex items-center ${departmentInfo.restrictedMode ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-200' : 'bg-blue-500/10 border-blue-500/30 text-blue-200'}`}>
-            <Users className="mr-3" />
+            <Users className="mr-3 flex-shrink-0" />
             <div>
               <div className="font-bold">{departmentInfo.restrictedMode ? 'Department Locked' : 'Open Election'}</div>
               <div className="text-sm opacity-80">{departmentInfo.message}</div>
@@ -234,7 +241,11 @@ function VotingPage() {
         <div className="space-y-8">
           {positions.map(position => {
             const pid = position._id || position.id;
-            const positionCandidates = candidates.filter(c => (c.positionId === pid) || (c.positionId._id === pid));
+            const positionCandidates = candidates.filter(c => {
+              // Normalize both sides to string for safe comparison
+              const cPosId = typeof c.positionId === 'object' ? String(c.positionId._id || c.positionId) : String(c.positionId);
+              return cPosId === String(pid);
+            });
             const userVote = votes[pid];
 
             return (
@@ -262,35 +273,33 @@ function VotingPage() {
                       <div
                         key={cid}
                         onClick={() => handleVoteChange(pid, cid)}
-                        className={`
-                          relative group cursor-pointer rounded-xl p-4 border transition-all duration-300
-                          ${isSelected
+                        className={`relative group cursor-pointer rounded-xl p-4 border transition-all duration-300 ${
+                          isSelected
                             ? 'bg-indigo-600/20 border-indigo-500 shadow-lg scale-[1.02]'
                             : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
-                          }
-                        `}
+                        }`}
                       >
                         <div className="flex items-start gap-4">
-                          {/* Checkbox circle */}
-                          <div className={`mt-1 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-gray-500'}`}>
+                          {/* Radio circle */}
+                          <div className={`mt-1 w-5 h-5 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-gray-500'}`}>
                             {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                           </div>
 
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 mb-2">
                               {candidate.photoURL ? (
-                                <img src={candidate.photoURL} alt={candidate.name} className="w-12 h-12 rounded-full object-cover border-2 border-white/10" />
+                                <img src={candidate.photoURL} alt={candidate.name} className="w-12 h-12 rounded-full object-cover border-2 border-white/10 flex-shrink-0" />
                               ) : (
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-white font-bold border-2 border-white/10">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-white font-bold border-2 border-white/10 flex-shrink-0">
                                   {candidate.name.charAt(0)}
                                 </div>
                               )}
-                              <div>
-                                <h4 className={`font-bold text-lg ${isSelected ? 'text-white' : 'text-gray-200'}`}>{candidate.name}</h4>
+                              <div className="min-w-0">
+                                <h4 className={`font-bold text-lg truncate ${isSelected ? 'text-white' : 'text-gray-200'}`}>{candidate.name}</h4>
                                 <span className="text-xs text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded">{candidate.class}</span>
                               </div>
                             </div>
-                            {candidate.bio && <p className="text-sm text-gray-400 line-clamp-2 pl-15">{candidate.bio}</p>}
+                            {candidate.bio && <p className="text-sm text-gray-400 line-clamp-2">{candidate.bio}</p>}
                           </div>
                         </div>
                       </div>
@@ -317,7 +326,7 @@ function VotingPage() {
                 <div className="flex items-center justify-center gap-2 font-bold mb-1">
                   <AlertTriangle size={16} /> Final Confirmation
                 </div>
-                Once submitted, your vote is final and cannot be changed. You will be logged out.
+                Once submitted, your vote is <strong>final and cannot be changed</strong>. You will be automatically signed out.
               </div>
               <Button
                 onClick={handleSubmitVotes}
@@ -326,7 +335,7 @@ function VotingPage() {
                 className="w-full max-w-md mx-auto py-4 text-lg shadow-xl shadow-green-500/20 hover:scale-105"
                 icon={CheckCircle}
               >
-                {submitting ? 'Encrypting & Submitting...' : 'Confirm & Cast Final Vote'}
+                {submitting ? 'Submitting...' : 'Confirm & Cast Final Vote'}
               </Button>
             </div>
           )}

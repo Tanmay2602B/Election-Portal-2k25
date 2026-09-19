@@ -317,8 +317,13 @@ const AdminDashboard = () => {
   const exportResults = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(candidates.map(c => {
-      const cVotes = votes.filter(v => v.candidateId === (c._id || c.id)).length;
-      return { Name: c.name, Position: positions.find(p => (p._id || p.id) === (c.positionId))?.name, Votes: cVotes };
+      const cid = String(c._id || c.id);
+      const cPosId = typeof c.positionId === 'object'
+        ? String(c.positionId._id || c.positionId)
+        : String(c.positionId);
+      const cVotes = votes.filter(v => String(v.candidateId) === cid).length;
+      const positionName = positions.find(p => String(p._id || p.id) === cPosId)?.name || 'Unknown';
+      return { Name: c.name, Position: positionName, Votes: cVotes };
     }));
     XLSX.utils.book_append_sheet(wb, ws, "Results");
     XLSX.writeFile(wb, "election_results.xlsx");

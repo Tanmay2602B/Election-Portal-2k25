@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import api from '../utils/api';
 
 const AuthContext = createContext();
@@ -12,9 +12,15 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [votingSchedule, setVotingSchedule] = useState(null);
 
+  // Stable ref so useEffect doesn't re-run on every render
+  const hasMounted = useRef(false);
+
   useEffect(() => {
+    if (hasMounted.current) return;
+    hasMounted.current = true;
     checkAuth();
     refreshVotingSchedule();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
@@ -74,7 +80,6 @@ export const AuthProvider = ({ children }) => {
     if (!votingSchedule) return { status: 'not_scheduled', message: 'Loading...' };
 
     const now = new Date();
-    // If date string, convert. MongoDB stores ISO strings usually or Date objects if Mongoose
     const start = new Date(votingSchedule.votingStart);
     const end = new Date(votingSchedule.votingEnd);
 
@@ -105,9 +110,13 @@ export const AuthProvider = ({ children }) => {
     return { status: 'not_scheduled', message: 'Voting unavailable' };
   };
 
+  /**
+   * Submit votes and immediately mark the user as having voted.
+   * The logout is triggered by VotingPage after the success countdown.
+   */
   const submitVote = async (votes) => {
     await api.post('/votes', votes);
-    // update local profile
+    // Mark locally so all guards pick it up immediately
     setUserProfile(prev => ({ ...prev, hasVoted: true }));
   };
 
