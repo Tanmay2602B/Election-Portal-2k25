@@ -144,7 +144,7 @@ const AdminDashboard = () => {
       loadData();
     } catch (error) {
       console.error("Error adding candidate:", error);
-      alert("Error adding candidate");
+      alert(error.response?.data?.msg || "Error adding candidate");
     }
   };
 

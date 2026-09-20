@@ -153,12 +153,12 @@ const AdminModal = ({
                             <select
                                 name="positionId"
                                 className="glass-input w-full px-4 py-2 rounded-lg"
-                                defaultValue={editItem?.positionId || ''}
+                                defaultValue={editItem?.positionId?._id || editItem?.positionId || ''}
                                 required
                             >
                                 <option value="" className="bg-gray-800">Select Position</option>
                                 {positions.map(pos => (
-                                    <option key={pos.id} value={pos.id} className="bg-gray-800">{pos.name}</option>
+                                    <option key={pos._id} value={pos._id} className="bg-gray-800">{pos.name}</option>
                                 ))}
                             </select>
                         </div>

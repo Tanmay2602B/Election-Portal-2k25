@@ -20,7 +20,8 @@ router.post('/', auth, async (req, res) => {
         const candidate = await newCandidate.save();
         res.json(candidate);
     } catch (err) {
-        res.status(500).send('Server Error');
+        console.error('Error adding candidate:', err.message);
+        res.status(400).json({ msg: err.message });
     }
 });
 

@@ -54,7 +54,7 @@ const AdminManage = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {positions.map(position => (
-                        <Card key={position.id} className="relative group" hover>
+                        <Card key={position._id} className="relative group" hover>
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={() => { setModalType('position'); setEditItem(position); setShowModal(true); }}
@@ -63,7 +63,7 @@ const AdminManage = ({
                                     <Edit size={16} />
                                 </button>
                                 <button
-                                    onClick={() => handleDeletePosition(position.id)}
+                                    onClick={() => handleDeletePosition(position._id)}
                                     className="p-2 rounded-full bg-white/10 hover:bg-red-500/20 text-red-300"
                                 >
                                     <Trash2 size={16} />
@@ -72,7 +72,7 @@ const AdminManage = ({
                             <h3 className="text-xl font-bold text-white mb-2">{position.name}</h3>
                             <p className="text-gray-400 text-sm mb-4 line-clamp-2">{position.description || 'No description provided.'}</p>
                             <div className="flex items-center gap-2 text-sm text-indigo-300 bg-indigo-500/10 px-3 py-1 rounded-full w-fit">
-                                <span>{candidates.filter(c => c.positionId === position.id).length} Annual Candidates</span>
+                                <span>{candidates.filter(c => String(c.positionId?._id || c.positionId) === String(position._id)).length} Annual Candidates</span>
                             </div>
                         </Card>
                     ))}
@@ -100,9 +100,9 @@ const AdminManage = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {candidates.map(candidate => {
-                        const position = positions.find(p => p.id === candidate.positionId);
+                        const position = positions.find(p => String(p._id) === String(candidate.positionId?._id || candidate.positionId));
                         return (
-                            <Card key={candidate.id} className="relative group text-center" hover>
+                            <Card key={candidate._id} className="relative group text-center" hover>
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                     <button
                                         onClick={() => { setModalType('candidate'); setEditItem(candidate); setShowModal(true); }}
@@ -111,7 +111,7 @@ const AdminManage = ({
                                         <Edit size={14} />
                                     </button>
                                     <button
-                                        onClick={() => handleDeleteCandidate(candidate.id)}
+                                        onClick={() => handleDeleteCandidate(candidate._id)}
                                         className="p-2 rounded-full bg-black/40 hover:bg-red-600/80 text-white"
                                     >
                                         <Trash2 size={14} />
