@@ -118,9 +118,17 @@ const AdminManage = ({
                                     </button>
                                 </div>
 
-                                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-lg">
-                                    {candidate.name.charAt(0)}
-                                </div>
+                                {candidate.photoURL ? (
+                                    <img
+                                        src={candidate.photoURL}
+                                        alt={candidate.name}
+                                        className="w-20 h-20 mx-auto rounded-full object-cover border-2 border-indigo-500/40 shadow-lg mb-4"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-lg">
+                                        {candidate.name.charAt(0)}
+                                    </div>
+                                )}
                                 <h3 className="text-lg font-bold text-white">{candidate.name}</h3>
                                 <p className="text-indigo-300 text-sm mb-1">{position?.name || 'Unknown Role'}</p>
                                 <p className="text-gray-500 text-xs">{candidate.class}</p>
