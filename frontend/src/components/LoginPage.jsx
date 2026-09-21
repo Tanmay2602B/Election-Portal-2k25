@@ -40,7 +40,16 @@ function LoginPage() {
     try {
       await login(id, password);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
+      // Network error or timeout — server may be waking up (Render free tier)
+      if (!err.response) {
+        setError('Server is starting up — please wait 30 seconds and try again.');
+      } else if (err.response.status === 400) {
+        setError(err.response.data?.message || 'Invalid credentials. Please check your ID and password.');
+      } else if (err.response.status === 500) {
+        setError('Server error. Please try again in a moment.');
+      } else {
+        setError(err.response?.data?.message || 'Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
