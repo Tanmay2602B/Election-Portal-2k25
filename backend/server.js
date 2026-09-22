@@ -13,7 +13,39 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+// ---------------------------------------------------------------------------
+// CORS — allow Vercel deployments, localhost dev, and any explicit overrides
+// ---------------------------------------------------------------------------
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [];
+
+const PRODUCTION_ORIGINS = [
+    'https://council-selections-portal.vercel.app',
+];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
+        if (!origin) return callback(null, true);
+
+        if (
+            PRODUCTION_ORIGINS.includes(origin) ||  // exact production URL
+            origin.endsWith('.vercel.app') ||         // Vercel preview deployments
+            origin.startsWith('http://localhost:') || // local dev
+            origin.startsWith('http://127.0.0.1:') ||
+            ALLOWED_ORIGINS.includes(origin)          // any extra origins via env var
+        ) {
+            return callback(null, true);
+        }
+
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(express.json());
 
 const MONGODB_URI = process.env.MONGODB_URI;

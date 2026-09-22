@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   AlertCircle, Vote, Users, Shield, Key, ArrowRight,
-  CheckCircle, Loader2, Eye, EyeOff
+  CheckCircle, Loader2, Eye, EyeOff, RefreshCw
 } from 'lucide-react';
 
 function LoginPage() {
@@ -11,43 +11,72 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [wakeCountdown, setWakeCountdown] = useState(null); // null = not waking up
+  const wakeTimerRef = useRef(null);
+  const pendingLoginRef = useRef(null); // stores { id, password } for auto-retry
   const { login } = useAuth();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError('');
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (wakeTimerRef.current) clearInterval(wakeTimerRef.current);
+    };
+  }, []);
+
+  const startWakeCountdown = (id, password) => {
+    const WAIT_SECONDS = 30;
+    setWakeCountdown(WAIT_SECONDS);
+    pendingLoginRef.current = { id, password };
+
+    wakeTimerRef.current = setInterval(() => {
+      setWakeCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(wakeTimerRef.current);
+          wakeTimerRef.current = null;
+          // Auto-retry login
+          attemptLogin(
+            pendingLoginRef.current.id,
+            pendingLoginRef.current.password,
+            true // isRetry
+          );
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const attemptLogin = async (id, password, isRetry = false) => {
     setLoading(true);
     setError('');
-
-    const id = isStudentLogin ? formData.studentId.trim() : formData.adminId.trim();
-    const password = formData.password;
-
-    if (!id) {
-      setError(isStudentLogin ? 'Please enter your Student ID.' : 'Please enter your Admin ID.');
-      setLoading(false);
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      setLoading(false);
-      return;
-    }
+    if (!isRetry) setWakeCountdown(null);
 
     try {
       await login(id, password);
     } catch (err) {
-      // Network error or timeout — server may be waking up (Render free tier)
       if (!err.response) {
-        setError('Server is starting up — please wait 30 seconds and try again.');
+        // Distinguish timeout vs CORS/network block
+        if (err.code === 'ECONNABORTED') {
+          // Genuine timeout — server might be slow
+          if (isRetry) {
+            setWakeCountdown(null);
+            setError('Server is taking longer than expected. Please wait a moment and try signing in again.');
+          } else {
+            startWakeCountdown(id, password);
+          }
+        } else {
+          // Likely CORS or network error — server is live but browser blocked the response
+          setWakeCountdown(null);
+          setError('Connection blocked — please contact the administrator or try refreshing the page.');
+        }
       } else if (err.response.status === 400) {
+        setWakeCountdown(null);
         setError(err.response.data?.message || 'Invalid credentials. Please check your ID and password.');
       } else if (err.response.status === 500) {
+        setWakeCountdown(null);
         setError('Server error. Please try again in a moment.');
       } else {
+        setWakeCountdown(null);
         setError(err.response?.data?.message || 'Login failed. Please try again.');
       }
     } finally {
@@ -55,7 +84,43 @@ function LoginPage() {
     }
   };
 
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    // If a wake-up countdown is running, cancel it and allow manual retry
+    if (wakeTimerRef.current) {
+      clearInterval(wakeTimerRef.current);
+      wakeTimerRef.current = null;
+      setWakeCountdown(null);
+    }
+
+    const id = isStudentLogin ? formData.studentId.trim() : formData.adminId.trim();
+    const password = formData.password;
+
+    if (!id) {
+      setError(isStudentLogin ? 'Please enter your Student ID.' : 'Please enter your Admin ID.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
+    await attemptLogin(id, password, false);
+  };
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
+  };
+
   const switchMode = (student) => {
+    // Cancel any ongoing wake-up timer when switching modes
+    if (wakeTimerRef.current) {
+      clearInterval(wakeTimerRef.current);
+      wakeTimerRef.current = null;
+    }
+    setWakeCountdown(null);
     setIsStudentLogin(student);
     setFormData({ studentId: '', adminId: '', password: '' });
     setError('');
@@ -113,6 +178,26 @@ function LoginPage() {
             Admin
           </button>
         </div>
+
+        {/* Server Wake-up Countdown Banner */}
+        {wakeCountdown !== null && (
+          <div className="mb-6 p-4 glass-panel border-amber-500/30 bg-amber-500/10 rounded-xl animate-pulse-soft">
+            <div className="flex items-center mb-2">
+              <RefreshCw className="h-5 w-5 text-amber-400 mr-3 flex-shrink-0 animate-spin" />
+              <span className="text-amber-200 text-sm font-semibold">Server is waking up…</span>
+            </div>
+            <p className="text-amber-300/80 text-xs ml-8">
+              Our free-tier server went to sleep. Auto-retrying your login in{' '}
+              <span className="font-bold text-amber-200">{wakeCountdown}s</span>. Please wait.
+            </p>
+            <div className="mt-2 ml-8 w-full bg-amber-900/40 rounded-full h-1">
+              <div
+                className="bg-amber-400 h-1 rounded-full transition-all duration-1000"
+                style={{ width: `${(wakeCountdown / 30) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
