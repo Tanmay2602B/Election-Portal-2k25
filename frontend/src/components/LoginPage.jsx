@@ -57,17 +57,21 @@ function LoginPage() {
       if (!err.response) {
         // Distinguish timeout vs CORS/network block
         if (err.code === 'ECONNABORTED') {
-          // Genuine timeout — server might be slow
+          // Genuine timeout — server might be slow / waking up
           if (isRetry) {
             setWakeCountdown(null);
             setError('Server is taking longer than expected. Please wait a moment and try signing in again.');
           } else {
             startWakeCountdown(id, password);
           }
-        } else {
-          // Likely CORS or network error — server is live but browser blocked the response
+        } else if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
+          // Pure network failure — no internet or server is completely down
           setWakeCountdown(null);
-          setError('Connection blocked — please contact the administrator or try refreshing the page.');
+          setError('Unable to reach the server. Please check your internet connection and try again.');
+        } else {
+          // CORS or browser-blocked response — server is up but request was blocked
+          setWakeCountdown(null);
+          setError('Could not connect to the server. Please try refreshing the page. If the issue persists, contact the administrator.');
         }
       } else if (err.response.status === 400) {
         setWakeCountdown(null);

@@ -24,27 +24,34 @@ const PRODUCTION_ORIGINS = [
     'https://council-selections-portal.vercel.app',
 ];
 
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
         // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
         if (!origin) return callback(null, true);
 
         if (
-            PRODUCTION_ORIGINS.includes(origin) ||  // exact production URL
-            origin.endsWith('.vercel.app') ||         // Vercel preview deployments
-            origin.startsWith('http://localhost:') || // local dev
+            PRODUCTION_ORIGINS.includes(origin) ||   // exact production URL
+            origin.endsWith('.vercel.app') ||          // Vercel preview deployments
+            origin.startsWith('http://localhost:') ||  // local dev (http)
+            origin.startsWith('https://localhost:') || // local dev (https)
             origin.startsWith('http://127.0.0.1:') ||
-            ALLOWED_ORIGINS.includes(origin)          // any extra origins via env var
+            origin.startsWith('https://127.0.0.1:') ||
+            ALLOWED_ORIGINS.includes(origin)           // any extra origins via env var
         ) {
             return callback(null, true);
         }
 
-        callback(new Error(`CORS: origin ${origin} not allowed`));
+        // Return null (not an Error) — gives the browser a clean 403 instead of a crash
+        return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+};
+
+// Handle CORS preflight for ALL routes before any other middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
