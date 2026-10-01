@@ -22,6 +22,7 @@ const AdminDashboard = () => {
   const [candidates, setCandidates] = useState([]);
   const [students, setStudents] = useState([]);
   const [votes, setVotes] = useState([]);
+  const [electionResults, setElectionResults] = useState([]); // pre-computed server-side results
 
   // Schedule State
   const [votingSchedule, setVotingSchedule] = useState({
@@ -48,13 +49,13 @@ const AdminDashboard = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Parallelize requests for speed
-      const [scheduleRes, positionsRes, candidatesRes, usersRes, votesRes] = await Promise.allSettled([
+      const [scheduleRes, positionsRes, candidatesRes, usersRes, votesRes, resultsRes] = await Promise.allSettled([
         api.get('/settings/votingSchedule'),
         api.get('/positions'),
         api.get('/candidates'),
-        api.get('/users'), // Admin only endpoint
-        api.get('/votes')
+        api.get('/users'),
+        api.get('/votes'),
+        api.get('/votes/results') // server-side pre-computed results (no ID comparison needed)
       ]);
 
       // 1. Schedule
@@ -74,12 +75,15 @@ const AdminDashboard = () => {
         setStudents(allUsers.filter(u => u.role === 'student'));
       }
 
-      // 5. Votes
+      // 5. Raw votes (used for stats count)
       if (votesRes.status === 'fulfilled') setVotes(votesRes.value.data);
+
+      // 6. Pre-computed results (server-side aggregated, no client ID comparison)
+      if (resultsRes.status === 'fulfilled') setElectionResults(resultsRes.value.data);
+      else console.error('Results fetch failed:', resultsRes.reason);
 
     } catch (error) {
       console.error("Error loading data:", error);
-      // alert("Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -316,13 +320,17 @@ const AdminDashboard = () => {
 
   const exportResults = () => {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(candidates.map(c => {
-      const cid = String(c._id || c.id);
-      const cPosId = String(typeof c.positionId === 'object' ? (c.positionId._id || c.positionId) : c.positionId);
-      const cVotes = votes.filter(v => String(v.candidateId) === cid).length;
-      const positionName = positions.find(p => String(p._id || p.id) === cPosId)?.name || 'Unknown';
-      return { Name: c.name, Position: positionName, Votes: cVotes };
-    }));
+    // Use pre-computed server-side results for accurate export
+    const rows = electionResults.flatMap(result =>
+      result.allCandidates.map(c => ({
+        Position: result.position.name,
+        Name: c.candidate.name,
+        Class: c.candidate.class || '',
+        Votes: c.votes,
+        Percentage: `${c.percentage}%`
+      }))
+    );
+    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Note: 'No results yet' }]);
     XLSX.utils.book_append_sheet(wb, ws, "Results");
     XLSX.writeFile(wb, "election_results.xlsx");
   };
@@ -406,9 +414,7 @@ const AdminDashboard = () => {
             {activeTab === 'results' && (
               <AdminResults
                 stats={stats}
-                positions={positions}
-                candidates={candidates}
-                votes={votes}
+                electionResults={electionResults}
                 exportResults={exportResults}
               />
             )}

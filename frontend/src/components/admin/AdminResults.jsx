@@ -1,12 +1,15 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, PieChart as PieChartIcon, BarChart as BarChartIcon } from 'lucide-react';
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, PieChart, Pie, Cell, Legend
+} from 'recharts';
+import { Download, PieChart as PieChartIcon, BarChart as BarChartIcon, Trophy } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 
-const AdminResults = ({ stats, positions, candidates, votes, exportResults }) => {
-    const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b'];
+const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b'];
 
+const AdminResults = ({ stats, electionResults = [], exportResults }) => {
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center glass-panel p-4 rounded-xl">
@@ -45,11 +48,9 @@ const AdminResults = ({ stats, positions, candidates, votes, exportResults }) =>
                                     cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                 />
                                 <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]}>
-                                    {
-                                        [0, 1, 2].map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))
-                                    }
+                                    {[0, 1, 2].map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
@@ -90,59 +91,68 @@ const AdminResults = ({ stats, positions, candidates, votes, exportResults }) =>
                 </Card>
             </div>
 
-            {/* Position Results */}
-            {positions.map(position => {
-                const posId = String(position._id || position.id);
-                const positionVotes = votes.filter(vote => String(vote.positionId) === posId);
-                const positionCandidates = candidates.filter(c => String(c.positionId) === posId);
+            {/* No results yet state */}
+            {electionResults.length === 0 && (
+                <div className="text-center py-16 glass-panel rounded-2xl">
+                    <Trophy className="w-14 h-14 text-gray-600 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-white mb-2">No Votes Recorded Yet</h3>
+                    <p className="text-gray-400">Results will appear here once students begin voting.</p>
+                </div>
+            )}
 
-                const chartData = positionCandidates.map(candidate => {
-                    const candId = String(candidate._id || candidate.id);
-                    const candidateVotes = positionVotes.filter(vote => String(vote.candidateId) === candId);
-                    const percentage = positionVotes.length > 0 ? (candidateVotes.length / positionVotes.length * 100).toFixed(1) : 0;
-                    return {
-                        name: candidate.name,
-                        votes: candidateVotes.length,
-                        percentage: parseFloat(percentage),
-                        class: candidate.class
-                    };
-                }).sort((a, b) => b.votes - a.votes);
+            {/* Position Results — uses server-side pre-computed data, zero client-side ID comparison */}
+            {electionResults.map(result => {
+                const chartData = result.allCandidates.map(c => ({
+                    name: c.candidate.name,
+                    votes: c.votes,
+                    percentage: c.percentage
+                }));
 
                 return (
-                    <div key={posId} className="glass-panel rounded-xl overflow-hidden">
+                    <div key={String(result.position._id)} className="glass-panel rounded-xl overflow-hidden">
                         <div className="p-4 border-b border-white/10 bg-white/5">
-                            <h3 className="text-xl font-bold text-white">{position.name}</h3>
-                            <p className="text-sm text-gray-400">{positionVotes.length} total votes cast</p>
+                            <h3 className="text-xl font-bold text-white">{result.position.name}</h3>
+                            <p className="text-sm text-gray-400">{result.totalVotes} total votes cast</p>
                         </div>
 
                         <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-                            {/* Table */}
+                            {/* Candidate List */}
                             <div className="md:col-span-2 space-y-3">
-                                {chartData.map((candidate, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                                {result.allCandidates.map((c, idx) => (
+                                    <div
+                                        key={String(c.candidate._id)}
+                                        className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                                    >
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-gray-400' : idx === 2 ? 'bg-orange-600' : 'bg-gray-700'}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-sm ${
+                                                idx === 0 ? 'bg-yellow-500' :
+                                                idx === 1 ? 'bg-gray-400' :
+                                                idx === 2 ? 'bg-orange-600' : 'bg-gray-700'
+                                            }`}>
                                                 {idx + 1}
                                             </div>
                                             <div>
-                                                <p className="font-medium text-white">{candidate.name}</p>
-                                                <p className="text-xs text-gray-400">{candidate.class}</p>
+                                                <p className="font-medium text-white">{c.candidate.name}</p>
+                                                <p className="text-xs text-gray-400">{c.candidate.class}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold text-lg text-white">{candidate.votes}</p>
+                                            <p className="font-bold text-lg text-white">{c.votes}</p>
                                             <div className="flex items-center gap-2">
                                                 <div className="w-24 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${candidate.percentage}%` }} />
+                                                    <div
+                                                        className="h-full bg-indigo-500 rounded-full"
+                                                        style={{ width: `${c.percentage}%` }}
+                                                    />
                                                 </div>
-                                                <p className="text-xs text-gray-400 w-8">{candidate.percentage}%</p>
+                                                <p className="text-xs text-gray-400 w-10">{c.percentage}%</p>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Chart */}
+                            {/* Pie Chart */}
                             <div className="h-64">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -154,13 +164,15 @@ const AdminResults = ({ stats, positions, candidates, votes, exportResults }) =>
                                             outerRadius={60}
                                             paddingAngle={5}
                                             dataKey="votes"
+                                            label={({ name, percentage }) => percentage > 0 ? `${percentage}%` : ''}
                                         >
-                                            {chartData.map((entry, index) => (
+                                            {chartData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                                             ))}
                                         </Pie>
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                            formatter={(value, name) => [`${value} votes`, name]}
                                         />
                                     </PieChart>
                                 </ResponsiveContainer>
