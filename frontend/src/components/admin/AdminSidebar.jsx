@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, Calendar, BarChart3, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, BarChart3, LogOut, Megaphone } from 'lucide-react';
 
 const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
     const menuItems = [
@@ -7,6 +7,7 @@ const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
         { id: 'manage', label: 'Manage Election', icon: Users },
         { id: 'schedule', label: 'Schedule', icon: Calendar },
         { id: 'results', label: 'Results', icon: BarChart3 },
+        { id: 'announcements', label: 'Announcements', icon: Megaphone },
     ];
 
     return (

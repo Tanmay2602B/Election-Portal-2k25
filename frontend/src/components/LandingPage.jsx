@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import {
   Vote, Users, LogIn, Shield, TrendingUp,
   CheckCircle, BarChart3, ChevronRight, Lock,
-  Eye, EyeOff, Key, FileCheck, Server, Fingerprint, AlertTriangle
+  Eye, EyeOff, Key, FileCheck, Server, Fingerprint, AlertTriangle,
+  Megaphone, Calendar, Clock, Zap, CheckCircle2
 } from 'lucide-react';
 import { getUpcomingElections } from '../utils/electionUtils';
 import CountdownTimer from './CountdownTimer';
 import LoadingSpinner from './LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
+import { AnnouncementCard } from './admin/AdminAnnouncements';
 
 function LandingPage() {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ function LandingPage() {
   const [loading, setLoading] = useState(true);
   const [votingStatus, setVotingStatus] = useState(null);
   const [liveStats, setLiveStats] = useState({ totalVoters: 0, totalVoted: 0, turnoutPercentage: 0 });
+  const [announcements, setAnnouncements] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -36,7 +39,8 @@ function LandingPage() {
       setLoading(true);
       const [electionData] = await Promise.all([
         getUpcomingElections().catch(() => null),
-        fetchStats()
+        fetchStats(),
+        api.get('/announcements').then(r => setAnnouncements(r.data)).catch(() => {})
       ]);
 
       if (electionData) {
@@ -224,20 +228,102 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* Election Timeline (only shown when voting is scheduled/active) */}
-      {(!isClosed && votingStatus) && (
-        <section className="py-20">
+      {/* Election Status Section */}
+      {votingStatus && (
+        <section className="py-16 border-t border-white/5">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="max-w-2xl mx-auto">
-              <h3 className="text-center text-2xl font-bold mb-8 text-white">Election Timeline</h3>
-              <CountdownTimer
-                targetTime={votingStatus.status === 'not_started' ? votingStatus.startTime : votingStatus.endTime}
-                status={votingStatus.status}
-              />
+            <div className="text-center mb-10">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 mb-4">
+                <Calendar className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm font-medium text-indigo-300">Election Status</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-white">
+                {votingStatus.status === 'active' ? '🗳️ Voting is Live Now' :
+                 votingStatus.status === 'not_started' ? '📅 Election Coming Soon' :
+                 '✅ Election Completed'}
+              </h2>
+            </div>
+
+            <div className="max-w-3xl mx-auto">
+              <div className={`glass-card rounded-2xl p-6 md:p-8 border ${
+                votingStatus.status === 'active' ? 'border-green-500/30 bg-green-500/5' :
+                votingStatus.status === 'not_started' ? 'border-indigo-500/30 bg-indigo-500/5' :
+                'border-gray-500/30 bg-gray-500/5'
+              }`}>
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                        votingStatus.status === 'active' ? 'bg-green-500 animate-pulse' :
+                        votingStatus.status === 'not_started' ? 'bg-yellow-500' : 'bg-gray-500'
+                      }`} />
+                      <span className={`text-sm font-bold tracking-widest uppercase ${
+                        votingStatus.status === 'active' ? 'text-green-400' :
+                        votingStatus.status === 'not_started' ? 'text-yellow-400' : 'text-gray-400'
+                      }`}>
+                        {votingStatus.status === 'active' ? 'Live' :
+                         votingStatus.status === 'not_started' ? 'Upcoming' : 'Completed'}
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm text-gray-400">
+                      {votingStatus.startTime && (
+                        <div className="flex items-center gap-2">
+                          <Clock size={13} className="text-indigo-400 flex-shrink-0" />
+                          <span>Opens: <strong className="text-white">{new Date(votingStatus.startTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong></span>
+                        </div>
+                      )}
+                      {votingStatus.endTime && (
+                        <div className="flex items-center gap-2">
+                          <Clock size={13} className="text-red-400 flex-shrink-0" />
+                          <span>Closes: <strong className="text-white">{new Date(votingStatus.endTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {votingStatus.status !== 'ended' && (
+                    <div className="flex-shrink-0">
+                      <CountdownTimer
+                        targetTime={votingStatus.status === 'not_started' ? votingStatus.startTime : votingStatus.endTime}
+                        status={votingStatus.status}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
       )}
+
+      {/* Announcements / Notice Board Section */}
+      <section className="py-16 border-t border-white/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/30 bg-purple-500/10 mb-4">
+              <Megaphone className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-medium text-purple-300">Notice Board</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">Latest Updates</h2>
+            <p className="text-gray-400 max-w-xl mx-auto text-sm leading-relaxed">
+              Important announcements and election notices from the administration.
+            </p>
+          </div>
+
+          {announcements.length === 0 ? (
+            <div className="text-center py-14 glass-card rounded-2xl max-w-lg mx-auto border border-white/5">
+              <Megaphone className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">No Announcements Yet</h3>
+              <p className="text-gray-500 text-sm">Check back later for election updates and notices.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {announcements.map(item => (
+                <AnnouncementCard key={item._id} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Privacy & Security Section */}
       <section className="py-20 border-t border-white/5 bg-white/[0.015]">

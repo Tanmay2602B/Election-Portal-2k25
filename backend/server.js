@@ -8,6 +8,7 @@ import positionRoutes from './routes/positions.js';
 import candidateRoutes from './routes/candidates.js';
 import voteRoutes from './routes/votes.js';
 import settingRoutes from './routes/settings.js';
+import announcementRoutes from './routes/announcements.js';
 
 dotenv.config();
 
@@ -65,6 +66,7 @@ app.use('/api/positions', positionRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/votes', voteRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 const PORT = process.env.PORT || 5000;
 

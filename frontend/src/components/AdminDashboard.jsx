@@ -10,6 +10,7 @@ import AdminOverview from './admin/AdminOverview';
 import AdminManage from './admin/AdminManage';
 import AdminSchedule from './admin/AdminSchedule';
 import AdminResults from './admin/AdminResults';
+import AdminAnnouncements from './admin/AdminAnnouncements';
 import AdminModal from './admin/AdminModal';
 
 const AdminDashboard = () => {
@@ -416,6 +417,10 @@ const AdminDashboard = () => {
                 electionResults={electionResults}
                 exportResults={exportResults}
               />
+            )}
+
+            {activeTab === 'announcements' && (
+              <AdminAnnouncements />
             )}
           </div>
         )}
