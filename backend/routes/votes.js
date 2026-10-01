@@ -5,6 +5,20 @@ import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
+// PUBLIC — no auth required — used by landing page
+router.get('/stats', async (req, res) => {
+    try {
+        const totalVoters = await User.countDocuments({ role: 'student' });
+        const totalVoted = await User.countDocuments({ role: 'student', hasVoted: true });
+        const turnoutPercentage = totalVoters > 0
+            ? parseFloat(((totalVoted / totalVoters) * 100).toFixed(1))
+            : 0;
+        res.json({ totalVoters, totalVoted, turnoutPercentage });
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
 router.get('/', auth, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
     try {
