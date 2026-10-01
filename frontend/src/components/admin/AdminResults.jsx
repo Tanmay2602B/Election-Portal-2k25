@@ -92,11 +92,13 @@ const AdminResults = ({ stats, positions, candidates, votes, exportResults }) =>
 
             {/* Position Results */}
             {positions.map(position => {
-                const positionVotes = votes.filter(vote => vote.positionId === position.id);
-                const positionCandidates = candidates.filter(c => c.positionId === position.id);
+                const posId = String(position._id || position.id);
+                const positionVotes = votes.filter(vote => String(vote.positionId) === posId);
+                const positionCandidates = candidates.filter(c => String(c.positionId) === posId);
 
                 const chartData = positionCandidates.map(candidate => {
-                    const candidateVotes = positionVotes.filter(vote => vote.candidateId === candidate.id);
+                    const candId = String(candidate._id || candidate.id);
+                    const candidateVotes = positionVotes.filter(vote => String(vote.candidateId) === candId);
                     const percentage = positionVotes.length > 0 ? (candidateVotes.length / positionVotes.length * 100).toFixed(1) : 0;
                     return {
                         name: candidate.name,
@@ -107,7 +109,7 @@ const AdminResults = ({ stats, positions, candidates, votes, exportResults }) =>
                 }).sort((a, b) => b.votes - a.votes);
 
                 return (
-                    <div key={position.id} className="glass-panel rounded-xl overflow-hidden">
+                    <div key={posId} className="glass-panel rounded-xl overflow-hidden">
                         <div className="p-4 border-b border-white/10 bg-white/5">
                             <h3 className="text-xl font-bold text-white">{position.name}</h3>
                             <p className="text-sm text-gray-400">{positionVotes.length} total votes cast</p>

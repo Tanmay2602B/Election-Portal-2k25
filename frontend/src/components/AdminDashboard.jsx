@@ -318,9 +318,7 @@ const AdminDashboard = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(candidates.map(c => {
       const cid = String(c._id || c.id);
-      const cPosId = typeof c.positionId === 'object'
-        ? String(c.positionId._id || c.positionId)
-        : String(c.positionId);
+      const cPosId = String(typeof c.positionId === 'object' ? (c.positionId._id || c.positionId) : c.positionId);
       const cVotes = votes.filter(v => String(v.candidateId) === cid).length;
       const positionName = positions.find(p => String(p._id || p.id) === cPosId)?.name || 'Unknown';
       return { Name: c.name, Position: positionName, Votes: cVotes };
