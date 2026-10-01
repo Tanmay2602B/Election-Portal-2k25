@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Vote, Calendar, Clock, Trophy, Users, LogIn, Shield, TrendingUp,
-  Award, CheckCircle, Activity, BarChart3, ChevronRight, Lock,
+  Vote, Users, LogIn, Shield, TrendingUp,
+  CheckCircle, BarChart3, ChevronRight, Lock,
   Eye, EyeOff, Key, FileCheck, Server, Fingerprint, AlertTriangle
 } from 'lucide-react';
-import { getLastElectionWinners, getUpcomingElections } from '../utils/electionUtils';
+import { getUpcomingElections } from '../utils/electionUtils';
 import CountdownTimer from './CountdownTimer';
 import LoadingSpinner from './LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,9 +14,6 @@ import api from '../utils/api';
 function LandingPage() {
   const navigate = useNavigate();
   const { userProfile, currentUser } = useAuth();
-  const [winners, setWinners] = useState([]);
-  // eslint-disable-next-line no-unused-vars
-  const [upcomingElection, setUpcomingElection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [votingStatus, setVotingStatus] = useState(null);
   const [liveStats, setLiveStats] = useState({ totalVoters: 0, totalVoted: 0, turnoutPercentage: 0 });
@@ -37,14 +34,10 @@ function LandingPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [winnersData, electionData] = await Promise.all([
-        getLastElectionWinners().catch(() => []),
+      const [electionData] = await Promise.all([
         getUpcomingElections().catch(() => null),
         fetchStats()
       ]);
-
-      setWinners(winnersData || []);
-      setUpcomingElection(electionData);
 
       if (electionData) {
         const now = new Date();
@@ -232,10 +225,10 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* Results or Timer Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {(!isClosed && votingStatus) ? (
+      {/* Election Timeline (only shown when voting is scheduled/active) */}
+      {(!isClosed && votingStatus) && (
+        <section className="py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl mx-auto">
               <h3 className="text-center text-2xl font-bold mb-8 text-white">Election Timeline</h3>
               <CountdownTimer
@@ -243,51 +236,9 @@ function LandingPage() {
                 status={votingStatus.status}
               />
             </div>
-          ) : (isClosed && winners.length > 0) ? (
-            <div>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold mb-4">Official Election Results</h2>
-                <p className="text-gray-400">The voting period has concluded. Here are the elected representatives.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {winners.map((result, index) => (
-                  <div key={result.position.id} className="glass-card rounded-2xl overflow-hidden hover:-translate-y-1 transition-transform">
-                    <div className="p-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
-                    <div className="p-6">
-                      <div className="flex justify-between items-start mb-6">
-                        <h3 className="font-bold text-lg text-white">{result.position.name}</h3>
-                        {index === 0 && <Award className="text-yellow-400 w-6 h-6" />}
-                      </div>
-                      {result.winner && (
-                        <div>
-                          <p className="text-2xl font-bold text-white mb-1">{result.winner.candidate.name}</p>
-                          <p className="text-sm text-indigo-300 mb-6">{result.winner.candidate.class}</p>
-                          <div className="space-y-3 bg-white/5 p-4 rounded-xl border border-white/5">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-400">Votes Received</span>
-                              <span className="font-bold text-white">{result.winner.votes}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-400">Vote Share</span>
-                              <span className="font-bold text-emerald-400">{result.winner.percentage}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : isClosed && winners.length === 0 ? (
-            <div className="text-center py-20 glass-card rounded-2xl max-w-3xl mx-auto">
-              <Trophy className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-white mb-2">Results Pending Publication</h3>
-              <p className="text-gray-400">The election is closed, but the official results have not been finalized yet.</p>
-            </div>
-          ) : null}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       {/* Privacy & Security Section */}
       <section className="py-20 border-t border-white/5 bg-white/[0.015]">
