@@ -399,12 +399,11 @@ const AdminDashboard = () => {
             {activeTab === 'schedule' && (
               <AdminSchedule
                 votingSchedule={votingSchedule}
-                setVotingSchedule={setVotingSchedule} // This updates local state, does not auto-save.
+                setVotingSchedule={setVotingSchedule}
                 handleSaveSchedule={handleSaveSchedule}
                 saving={saving}
                 saveStatus={saveStatus}
                 formatDuration={formatDuration}
-                getTimeRemaining={getTimeRemaining}
                 handleStartVoting={handleStartVoting}
                 handleEndVoting={handleEndVoting}
                 loadData={loadData}

@@ -66,7 +66,6 @@ function LandingPage() {
       }
     } catch (error) {
       console.error('Data load error:', error);
-      setWinners([]);
     } finally {
       setLoading(false);
     }

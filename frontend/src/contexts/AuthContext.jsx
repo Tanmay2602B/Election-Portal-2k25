@@ -80,34 +80,53 @@ export const AuthProvider = ({ children }) => {
     if (!votingSchedule) return { status: 'not_scheduled', message: 'Loading...' };
 
     const now = new Date();
-    const start = new Date(votingSchedule.votingStart);
-    const end = new Date(votingSchedule.votingEnd);
+    const start = votingSchedule.votingStart ? new Date(votingSchedule.votingStart) : null;
+    const end = votingSchedule.votingEnd ? new Date(votingSchedule.votingEnd) : null;
 
+    // isActive is the admin's authoritative override — always respect it first
     if (votingSchedule.isActive) {
       return {
         status: 'active',
         message: 'Voting is currently active!',
         countdown: true,
         endTime: votingSchedule.votingEnd,
-        timeRemaining: end.getTime() - now.getTime()
-      };
-    } else if (now < start) {
-      return {
-        status: 'not_started',
-        message: 'Voting has not started yet.',
-        countdown: true,
         startTime: votingSchedule.votingStart,
-        timeRemaining: start.getTime() - now.getTime()
-      };
-    } else if (now > end) {
-      return {
-        status: 'ended',
-        message: 'Voting duration has ended.',
-        countdown: false
+        timeRemaining: end ? end.getTime() - now.getTime() : null
       };
     }
 
-    return { status: 'not_scheduled', message: 'Voting unavailable' };
+    // isActive is false — check time window
+    if (start && end && !isNaN(start) && !isNaN(end)) {
+      if (now < start) {
+        return {
+          status: 'not_started',
+          message: 'Voting has not started yet.',
+          countdown: true,
+          startTime: votingSchedule.votingStart,
+          endTime: votingSchedule.votingEnd,
+          timeRemaining: start.getTime() - now.getTime()
+        };
+      } else if (now > end) {
+        return {
+          status: 'ended',
+          message: 'Voting period has ended.',
+          countdown: false,
+          startTime: votingSchedule.votingStart,
+          endTime: votingSchedule.votingEnd
+        };
+      } else {
+        // Within window but isActive=false → admin has not opened it yet
+        return {
+          status: 'not_started',
+          message: 'Election scheduled but not yet opened by admin.',
+          countdown: false,
+          startTime: votingSchedule.votingStart,
+          endTime: votingSchedule.votingEnd
+        };
+      }
+    }
+
+    return { status: 'not_scheduled', message: 'No election scheduled.' };
   };
 
   /**
