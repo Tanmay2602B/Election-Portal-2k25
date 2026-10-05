@@ -61,7 +61,7 @@ const AdminAnnouncements = () => {
         try {
             const res = await api.get('/announcements/all');
             setAnnouncements(res.data);
-        } catch (err) {
+        } catch {
             setError('Failed to load announcements.');
         } finally {
             setLoading(false);

@@ -20,7 +20,6 @@ export const AuthProvider = ({ children }) => {
     hasMounted.current = true;
     checkAuth();
     refreshVotingSchedule();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {

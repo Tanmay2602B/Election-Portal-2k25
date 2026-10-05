@@ -80,4 +80,82 @@ router.post('/seed-admin', async (req, res) => {
     }
 });
 
+// ADMIN ONLY — create a new admin account
+router.post('/create-admin', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+
+    const { studentId, name, password } = req.body;
+    if (!studentId || !name || !password) {
+        return res.status(400).json({ msg: 'studentId, name and password are all required' });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ msg: 'Password must be at least 6 characters' });
+    }
+
+    try {
+        const exists = await User.findOne({ studentId });
+        if (exists) return res.status(400).json({ msg: 'A user with that ID already exists' });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const admin = new User({ studentId, name, password: hashedPassword, role: 'admin' });
+        await admin.save();
+        res.json({ msg: 'Admin created successfully', studentId, name });
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+// ADMIN ONLY — change password for any account (by studentId)
+router.post('/change-password', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+
+    const { studentId, newPassword } = req.body;
+    if (!studentId || !newPassword) {
+        return res.status(400).json({ msg: 'studentId and newPassword are required' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ msg: 'Password must be at least 6 characters' });
+    }
+
+    try {
+        const user = await User.findOne({ studentId });
+        if (!user) return res.status(404).json({ msg: 'User not found' });
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+        res.json({ msg: `Password updated for ${studentId}` });
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+// ADMIN ONLY — delete an admin account (cannot delete yourself)
+router.delete('/delete-admin/:studentId', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+    if (req.params.studentId === req.user.id) {
+        return res.status(400).json({ msg: 'You cannot delete your own account' });
+    }
+
+    try {
+        const user = await User.findOne({ studentId: req.params.studentId, role: 'admin' });
+        if (!user) return res.status(404).json({ msg: 'Admin not found' });
+
+        await User.deleteOne({ studentId: req.params.studentId });
+        res.json({ msg: `Admin "${req.params.studentId}" deleted` });
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+// ADMIN ONLY — list all admin accounts
+router.get('/admins', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+    try {
+        const admins = await User.find({ role: 'admin' }).select('-password').sort({ createdAt: 1 });
+        res.json(admins);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
 export default router;

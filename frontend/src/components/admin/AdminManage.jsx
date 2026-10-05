@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Settings, Download, Upload, Search, Filter, RefreshCw, Archive } from 'lucide-react';
+import { Plus, Edit, Trash2, Settings, Download, Upload, Search, Filter, RefreshCw, Archive, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 
@@ -23,6 +24,19 @@ const AdminManage = ({
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Download a blank import template
+    const downloadTemplate = () => {
+        const templateData = [
+            { studentId: 'S001', name: 'John Doe', class: 'BCA-1', semester: 'Semester 1', password: 'password123' },
+            { studentId: 'S002', name: 'Jane Smith', class: 'BCA-2', semester: 'Semester 3', password: 'password123' },
+        ];
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(templateData);
+        // Set column widths for readability
+        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
+        XLSX.writeFile(wb, 'student_import_template.xlsx');
+    };
 
     // Filter students
     const filteredStudents = students.filter(student => {
@@ -161,6 +175,10 @@ const AdminManage = ({
                                 onChange={(e) => e.target.files[0] && handleUploadStudents(e.target.files[0])}
                             />
                         </div>
+
+                        <Button variant="secondary" onClick={downloadTemplate} icon={FileDown} title="Download blank import template">
+                            Template
+                        </Button>
 
                         <Button variant="secondary" onClick={exportCredentials} icon={Download}>Credentials</Button>
                         <Button

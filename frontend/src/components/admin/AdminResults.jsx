@@ -164,7 +164,7 @@ const AdminResults = ({ stats, electionResults = [], exportResults }) => {
                                             outerRadius={60}
                                             paddingAngle={5}
                                             dataKey="votes"
-                                            label={({ name, percentage }) => percentage > 0 ? `${percentage}%` : ''}
+                                            label={({ percentage }) => percentage > 0 ? `${percentage}%` : ''}
                                         >
                                             {chartData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />

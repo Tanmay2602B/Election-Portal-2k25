@@ -42,7 +42,8 @@ const AdminSchedule = ({
             if (start < now && !votingSchedule.isActive) errors.push('Start time is in the past. Consider updating it.');
         }
         return errors;
-    }, [votingSchedule.votingStart, votingSchedule.votingEnd]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [votingSchedule.votingStart, votingSchedule.votingEnd, votingSchedule.isActive]);
 
     const durationMs = start && end ? end - start : null;
     const durationValid = durationMs !== null && durationMs > 0;
