@@ -81,6 +81,24 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
+// DELETE /api/users — Admin: delete ALL students and their votes
+router.delete('/', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+    try {
+        // Delete all student users (keep admin accounts)
+        const deleteResult = await User.deleteMany({ role: 'student' });
+        // Delete all vote documents
+        await Vote.deleteMany({});
+        res.json({
+            msg: `Deleted ${deleteResult.deletedCount} student(s) and all associated votes.`,
+            deletedCount: deleteResult.deletedCount
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
 // DELETE /api/users/:id — Admin: delete a student and their votes
 router.delete('/:id', auth, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });

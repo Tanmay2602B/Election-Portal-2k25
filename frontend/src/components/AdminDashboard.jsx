@@ -250,8 +250,16 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteAllStudents = async () => {
-    if (!confirm('WARNING: Not implemented perfectly for safety. Contact Dev.')) return;
-    // Would implement a delete-all endpoint in backend
+    if (!confirm('⚠️ WARNING: This will permanently delete ALL students and their votes.\n\nThis cannot be undone. Are you sure?')) return;
+    if (!confirm('Final confirmation: delete every student account and all vote records?')) return;
+    try {
+      await api.delete('/users');
+      loadData();
+      alert('All students and their votes have been deleted.');
+    } catch (error) {
+      console.error('Error deleting all students:', error);
+      alert(error.response?.data?.msg || 'Error deleting all students');
+    }
   };
 
   const handleResetAllPasswords = async () => {
