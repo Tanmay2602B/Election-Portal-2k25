@@ -9,6 +9,7 @@ import candidateRoutes from './routes/candidates.js';
 import voteRoutes from './routes/votes.js';
 import settingRoutes from './routes/settings.js';
 import announcementRoutes from './routes/announcements.js';
+import votingBatchRoutes from './routes/votingBatch.js';
 import {
     helmetMiddleware,
     globalLimiter,
@@ -87,6 +88,9 @@ app.use('/api/announcements', adminLimiter, announcementRoutes);
 
 // Votes: uses its own internal per-route limiters (voteLimiter, concurrentVoteGate)
 app.use('/api/votes', voteRoutes);
+
+// Voting Batch: class-by-class supervised voting sessions
+app.use('/api/voting-batch', adminLimiter, votingBatchRoutes);
 
 // ─── 404 fallback ────────────────────────────────────────────────────────────
 app.use((req, res) => {

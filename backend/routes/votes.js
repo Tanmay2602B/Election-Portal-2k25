@@ -4,12 +4,11 @@ import User from '../models/User.js';
 import Position from '../models/Position.js';
 import Candidate from '../models/Candidate.js';
 import Setting from '../models/Settings.js';
+import VotingBatch from '../models/VotingBatch.js';
 import auth from '../middleware/auth.js';
 import {
     voteLimiter,
     concurrentVoteGate,
-    classVoteCooldownGate,
-    batchClassGate,
     startClassCooldown,
     getCooldownState,
     clearClassCooldown
@@ -146,23 +145,49 @@ router.post('/cooldown/start', auth, (req, res) => {
 // ─── STUDENT — individual vote submission ─────────────────────────────────────
 /**
  * POST /api/votes
- * Rate-limited to 10/15min per IP, concurrent cap 100, class cooldown enforced.
+ * Rate-limited to 10/15min per IP, concurrent cap 100.
+ * Guarded by inline VotingBatch check (must be in an open batch).
  */
 router.post(
     '/',
     auth,
     voteLimiter,
     concurrentVoteGate,
-    batchClassGate,        // ← block classes not in the active batch
-    classVoteCooldownGate, // ← block if this class is in cooldown
     async (req, res) => {
         const votesArray = req.body;
         const userId = req.user.id;
 
         try {
+            // ── Inline VotingBatch guard ──────────────────────────────────────
+            // 1. Fetch the batch singleton
+            const batch = await VotingBatch.findById('current');
+
+            // 2. Batch must be open
+            if (!batch || batch.status !== 'open') {
+                return res.status(429).json({ error: 'batch_not_open' });
+            }
+
+            // 3. Student must be listed in this batch
+            if (!batch.studentIds.includes(userId)) {
+                return res.status(403).json({ error: 'not_in_batch' });
+            }
+
+            // 4. Atomic slot claim — fails if batch is already at capacity
+            const slotClaimed = await VotingBatch.findOneAndUpdate(
+                { _id: 'current', status: 'open', activeSubmissions: { $lt: 100 } },
+                { $inc: { activeSubmissions: 1 } },
+                { new: true }
+            );
+            if (!slotClaimed) {
+                return res.status(429).json({ error: 'batch_at_capacity' });
+            }
+            // ── End VotingBatch guard ─────────────────────────────────────────
+
             const user = await User.findOne({ studentId: userId });
             if (!user) return res.status(404).json({ msg: 'Student not found' });
             if (user.hasVoted) {
+                // Release the slot we just claimed
+                await VotingBatch.findByIdAndUpdate('current', { $inc: { activeSubmissions: -1 } });
                 return res.status(400).json({ msg: 'You have already voted' });
             }
 
@@ -179,11 +204,23 @@ router.post(
                 { hasVoted: true, voteTimestamp: new Date() }
             );
 
-            // Trigger a 2-minute cooldown for this student's class once they vote.
-            // The cooldown starts (or resets) each time a vote is cast — the last
-            // voter in a class naturally starts the 2-min window before the next
-            // class begins.
-            startClassCooldown(user.class, 'auto');
+            // Release the active submissions slot
+            await VotingBatch.findByIdAndUpdate('current', { $inc: { activeSubmissions: -1 } });
+
+            // Auto-close: if no unvoted students remain in this batch, start cooldown
+            const remaining = await User.countDocuments({
+                studentId: { $in: batch.studentIds },
+                hasVoted: false
+            });
+            if (remaining === 0) {
+                await VotingBatch.findByIdAndUpdate('current', {
+                    $set: {
+                        status: 'cooldown',
+                        cooldownUntil: new Date(Date.now() + 120_000),
+                        lastUpdatedAt: new Date()
+                    }
+                });
+            }
 
             res.json({ msg: 'Votes submitted successfully' });
 
