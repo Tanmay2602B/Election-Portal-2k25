@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { Vote, CheckCircle, ArrowLeft, AlertTriangle, Users } from 'lucide-react';
+import { Vote, CheckCircle, ArrowLeft, AlertTriangle, Users, Clock } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -21,6 +21,7 @@ function VotingPage() {
   const [departmentInfo, setDepartmentInfo] = useState(null);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(8);
+  const [batchBlocked, setBatchBlocked] = useState(null); // { allowedClasses, yourClass }
 
   // Guard: if the user has already voted, log them out immediately.
   useEffect(() => {
@@ -117,6 +118,15 @@ function VotingPage() {
       setVoteSubmitted(true);
     } catch (err) {
       console.error('Error submitting votes:', err);
+      // Batch class restriction — show a dedicated screen
+      if (err.response?.data?.error === 'batch_not_open') {
+        setBatchBlocked({
+          allowedClasses: err.response.data.allowedClasses || [],
+          yourClass: err.response.data.yourClass || userProfile?.class || ''
+        });
+        setSubmitting(false);
+        return;
+      }
       setError('Failed to submit votes. ' + (err.response?.data?.msg || ''));
       setSubmitting(false);
     }
@@ -128,6 +138,37 @@ function VotingPage() {
     return (
       <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
         <LoadingSpinner message="Loading Ballot..." />
+      </div>
+    );
+  }
+
+  // Batch class restriction — student's class is not the active batch
+  if (batchBlocked) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
+        <div className="max-w-md w-full glass-panel rounded-2xl border border-amber-500/30 bg-amber-500/5 p-8 text-center animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-8 h-8 text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">Please Wait</h2>
+          <p className="text-amber-200 mb-2 font-medium">
+            Voting is currently open for:
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 mb-4">
+            {batchBlocked.allowedClasses.map(cls => (
+              <span key={cls} className="px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-sm font-semibold">
+                {cls}
+              </span>
+            ))}
+          </div>
+          <p className="text-gray-400 text-sm mb-6">
+            Your class (<span className="text-white font-medium">{batchBlocked.yourClass}</span>) is not in the active batch.
+            Your teacher will let you know when it's your turn to vote.
+          </p>
+          <Button onClick={handleGoBack} variant="ghost" className="w-full">
+            Return to Dashboard
+          </Button>
+        </div>
       </div>
     );
   }

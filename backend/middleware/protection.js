@@ -162,8 +162,50 @@ export const classVoteCooldownGate = async (req, res, next) => {
 };
 
 /**
- * Expose cooldown state and manual clear for admin routes.
+ * batchClassGate — blocks individual vote submissions from students whose class
+ * is not in the currently open batch (batchClassFilter).
+ *
+ * Logic:
+ *  - If batchVotingEnabled is false → no restriction (open election)
+ *  - If batchClassFilter is empty   → no restriction (all classes allowed)
+ *  - If batchClassFilter has entries → only those classes may vote; others get 403
  */
+export const batchClassGate = async (req, res, next) => {
+    try {
+        const Setting = (await import('../models/Settings.js')).default;
+        const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' }).lean();
+
+        // If batch mode isn't enabled or no filter is set, allow everyone
+        if (
+            !scheduleSetting?.value?.batchVotingEnabled ||
+            !Array.isArray(scheduleSetting.value.batchClassFilter) ||
+            scheduleSetting.value.batchClassFilter.length === 0
+        ) {
+            return next();
+        }
+
+        const allowedClasses = scheduleSetting.value.batchClassFilter;
+
+        // Look up the student's class
+        const User = (await import('../models/User.js')).default;
+        const user = await User.findOne({ studentId: req.user.id }).lean();
+        if (!user) return next(); // let the route handler deal with missing user
+
+        if (!allowedClasses.includes(user.class)) {
+            return res.status(403).json({
+                error: 'batch_not_open',
+                msg: `Voting is currently open for ${allowedClasses.join(', ')} only. Your class (${user.class}) is not in the active batch.`,
+                allowedClasses,
+                yourClass: user.class
+            });
+        }
+
+        next();
+    } catch (err) {
+        // Non-fatal: if settings can't be read, let the request through
+        next();
+    }
+};
 export const getCooldownState = () => {
     const state = {};
     for (const [cls, entry] of classCooldowns.entries()) {

@@ -9,6 +9,7 @@ import {
     voteLimiter,
     concurrentVoteGate,
     classVoteCooldownGate,
+    batchClassGate,
     startClassCooldown,
     getCooldownState,
     clearClassCooldown
@@ -152,7 +153,8 @@ router.post(
     auth,
     voteLimiter,
     concurrentVoteGate,
-    classVoteCooldownGate,
+    batchClassGate,        // ← block classes not in the active batch
+    classVoteCooldownGate, // ← block if this class is in cooldown
     async (req, res) => {
         const votesArray = req.body;
         const userId = req.user.id;
