@@ -9,10 +9,24 @@ import candidateRoutes from './routes/candidates.js';
 import voteRoutes from './routes/votes.js';
 import settingRoutes from './routes/settings.js';
 import announcementRoutes from './routes/announcements.js';
+import {
+    helmetMiddleware,
+    globalLimiter,
+    authLimiter
+} from './middleware/protection.js';
 
 dotenv.config();
 
 const app = express();
+
+// ─── Security headers (helmet) ────────────────────────────────────────────────
+app.use(helmetMiddleware);
+
+// ─── Trust proxy (needed for accurate IP detection on Render / Vercel) ────────
+app.set('trust proxy', 1);
+
+// ─── Global DDoS / flood rate limiter — 200 req / 15 min per IP ──────────────
+app.use(globalLimiter);
 
 // ---------------------------------------------------------------------------
 // CORS — allow Vercel deployments, localhost dev, and any explicit overrides
@@ -51,7 +65,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
 app.use(express.json());
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -60,13 +73,21 @@ mongoose.connect(MONGODB_URI)
     .then(() => console.log('Connected to MongoDB'))
     .catch((err) => console.error('MongoDB connection error:', err));
 
-app.use('/api/auth', authRoutes);
+// ─── Routes ──────────────────────────────────────────────────────────────────
+// Auth gets its own tighter limiter (brute-force login protection)
+app.use('/api/auth', authLimiter, authRoutes);
+
 app.use('/api/users', userRoutes);
 app.use('/api/positions', positionRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/votes', voteRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/announcements', announcementRoutes);
+
+// ─── 404 fallback ────────────────────────────────────────────────────────────
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
 
 const PORT = process.env.PORT || 5000;
 
