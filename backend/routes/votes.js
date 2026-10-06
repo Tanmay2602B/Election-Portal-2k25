@@ -3,6 +3,7 @@ import Vote from '../models/Vote.js';
 import User from '../models/User.js';
 import Position from '../models/Position.js';
 import Candidate from '../models/Candidate.js';
+import Setting from '../models/Settings.js';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
@@ -131,6 +132,109 @@ router.post('/', auth, async (req, res) => {
         console.error(err);
         res.status(500).send('Server Error');
     }
+});
+
+/**
+ * POST /votes/batch
+ * Class Voting Batch — process up to 100 ballot submissions simultaneously.
+ *
+ * Request body:
+ * {
+ *   submissions: [
+ *     { studentId: "2024-001", votes: [{ positionId, candidateId }, ...] },
+ *     ...
+ *   ]
+ * }
+ *
+ * Each submission is one student's complete ballot.
+ * The batch is capped at 100 submissions per request (configurable via
+ * the votingSchedule.batchSize setting stored in Settings).
+ * All submissions in the batch are processed in parallel.
+ */
+router.post('/batch', auth, async (req, res) => {
+    // Only admins can use this endpoint
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ msg: 'Access denied: batch endpoint is admin-only' });
+    }
+
+    const { submissions } = req.body;
+
+    if (!Array.isArray(submissions) || submissions.length === 0) {
+        return res.status(400).json({ msg: 'submissions must be a non-empty array' });
+    }
+
+    // Hard cap of 100 simultaneous submissions
+    const HARD_CAP = 100;
+    if (submissions.length > HARD_CAP) {
+        return res.status(400).json({
+            msg: `Batch size ${submissions.length} exceeds the maximum of ${HARD_CAP} simultaneous submissions.`
+        });
+    }
+
+    // Enforce the admin-configured batchSize from settings (if batch voting is enabled)
+    try {
+        const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' });
+        if (scheduleSetting?.value?.batchVotingEnabled && scheduleSetting?.value?.batchSize) {
+            const configuredMax = Math.min(scheduleSetting.value.batchSize, HARD_CAP);
+            if (submissions.length > configuredMax) {
+                return res.status(400).json({
+                    msg: `Batch size ${submissions.length} exceeds the configured limit of ${configuredMax}.`
+                });
+            }
+        }
+    } catch (_settingsErr) {
+        // If settings can't be read, fall back to the hard cap only
+    }
+
+    // Process all submissions in parallel
+    const results = await Promise.allSettled(
+        submissions.map(async ({ studentId, votes: ballotVotes }) => {
+            if (!studentId || !Array.isArray(ballotVotes) || ballotVotes.length === 0) {
+                throw new Error(`Invalid submission for studentId: ${studentId}`);
+            }
+
+            const user = await User.findOne({ studentId });
+            if (!user) throw new Error(`Student not found: ${studentId}`);
+            if (user.hasVoted) throw new Error(`${studentId} has already voted`);
+
+            const voteDocuments = ballotVotes.map(v => ({
+                userId: studentId,
+                positionId: v.positionId,
+                candidateId: v.candidateId,
+                studentClass: user.class
+            }));
+
+            await Vote.insertMany(voteDocuments);
+            await User.findOneAndUpdate(
+                { studentId },
+                { hasVoted: true, voteTimestamp: new Date() }
+            );
+
+            return { studentId, status: 'success' };
+        })
+    );
+
+    const summary = results.map((r, i) => {
+        if (r.status === 'fulfilled') {
+            return { studentId: submissions[i].studentId, status: 'success' };
+        }
+        return {
+            studentId: submissions[i].studentId,
+            status: 'failed',
+            reason: r.reason?.message || 'Unknown error'
+        };
+    });
+
+    const succeeded = summary.filter(s => s.status === 'success').length;
+    const failed = summary.filter(s => s.status === 'failed').length;
+
+    res.json({
+        msg: `Batch complete: ${succeeded} succeeded, ${failed} failed`,
+        total: submissions.length,
+        succeeded,
+        failed,
+        results: summary
+    });
 });
 
 export default router;

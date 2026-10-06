@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Calendar, Clock, CheckCircle, AlertCircle, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, AlertCircle, RefreshCw, AlertTriangle, Info, Users } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import LiveClock from '../LiveClock';
@@ -194,6 +194,110 @@ const AdminSchedule = ({
                                         <div className="mt-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center gap-2 text-orange-300 text-sm">
                                             <AlertCircle size={16} />
                                             Students will be restricted to their own department's candidates.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+
+                    {/* Class Voting Batch */}
+                    <Card>
+                        <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                            <Users className="text-indigo-400" size={20} />
+                            Class Voting Batch
+                        </h3>
+                        <p className="text-sm text-gray-400 mb-6">
+                            Process multiple ballot submissions simultaneously — up to 100 at a time.
+                            Ideal for classroom-supervised voting sessions.
+                        </p>
+
+                        <div className="space-y-4">
+                            <label className="flex items-start gap-3 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/5">
+                                <input
+                                    type="checkbox"
+                                    checked={!!votingSchedule.batchVotingEnabled}
+                                    onChange={(e) => setVotingSchedule(prev => ({
+                                        ...prev,
+                                        batchVotingEnabled: e.target.checked,
+                                        // default batch size if not set
+                                        batchSize: prev.batchSize || 30
+                                    }))}
+                                    className="mt-1 h-5 w-5 rounded border-gray-600 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
+                                />
+                                <div>
+                                    <span className="block font-medium text-white">Enable Batch Voting</span>
+                                    <span className="block text-sm text-gray-400 mt-1">
+                                        Allow simultaneous ballot submissions for an entire class at once
+                                    </span>
+                                </div>
+                            </label>
+
+                            {votingSchedule.batchVotingEnabled && (
+                                <div className="ml-8 animate-fade-in space-y-4">
+                                    {/* Batch size slider */}
+                                    <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <label className="text-sm font-medium text-gray-300">
+                                                Max Simultaneous Submissions
+                                            </label>
+                                            <span className="text-lg font-bold text-indigo-300 min-w-[3rem] text-right">
+                                                {votingSchedule.batchSize ?? 30}
+                                            </span>
+                                        </div>
+
+                                        <input
+                                            type="range"
+                                            min={1}
+                                            max={100}
+                                            value={votingSchedule.batchSize ?? 30}
+                                            onChange={(e) => setVotingSchedule(prev => ({
+                                                ...prev,
+                                                batchSize: Number(e.target.value)
+                                            }))}
+                                            className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-indigo-500 bg-gray-700"
+                                        />
+
+                                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                            <span>1</span>
+                                            <span>50</span>
+                                            <span>100</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Or type a number directly */}
+                                    <div className="flex items-center gap-3">
+                                        <label className="text-sm text-gray-400 whitespace-nowrap">
+                                            Or enter exact value:
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            value={votingSchedule.batchSize ?? 30}
+                                            onChange={(e) => {
+                                                const val = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                                                setVotingSchedule(prev => ({ ...prev, batchSize: val }));
+                                            }}
+                                            className="glass-input w-24 px-3 py-2 rounded-xl text-center text-white text-sm"
+                                        />
+                                        <span className="text-xs text-gray-500">ballots (max 100)</span>
+                                    </div>
+
+                                    {/* Info banner */}
+                                    <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-2 text-indigo-300 text-sm">
+                                        <Info size={16} className="mt-0.5 shrink-0" />
+                                        <span>
+                                            Up to <strong>{votingSchedule.batchSize ?? 30}</strong> ballot submissions will be
+                                            processed simultaneously. Extra requests beyond the limit are queued and processed
+                                            in the next available slot.
+                                        </span>
+                                    </div>
+
+                                    {(votingSchedule.batchSize ?? 30) === 100 && (
+                                        <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center gap-2 text-orange-300 text-sm">
+                                            <AlertTriangle size={16} />
+                                            Maximum batch size selected. Ensure your server can handle the load.
                                         </div>
                                     )}
                                 </div>

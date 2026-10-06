@@ -31,7 +31,9 @@ const AdminDashboard = () => {
     votingEnd: '',
     isActive: false,
     enableDepartmentalVoting: false,
-    allowCrossDepartmentVoting: true
+    allowCrossDepartmentVoting: true,
+    batchVotingEnabled: false,
+    batchSize: 30
   });
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
