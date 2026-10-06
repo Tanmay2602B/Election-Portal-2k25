@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, Settings, Download, Upload, Search, Filter, Refresh
 import * as XLSX from 'xlsx';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
+import ImportPreviewModal from './ImportPreviewModal';
 
 const AdminManage = ({
     positions,
@@ -23,6 +24,8 @@ const AdminManage = ({
     loadData
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [showImportPreview, setShowImportPreview] = useState(false);
+    const [pendingFile, setPendingFile] = useState(null);
 
     // Download a blank import template
     const downloadTemplate = () => {
@@ -175,13 +178,14 @@ const AdminManage = ({
                         <Button variant="ghost" onClick={loadData} icon={RefreshCw}>Refresh</Button>
 
                         <div className="relative group">
-                            <Button variant="secondary" icon={Upload}>Import</Button>
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls,.csv"
-                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                onChange={(e) => e.target.files[0] && handleUploadStudents(e.target.files[0])}
-                            />
+                            <Button
+                                variant="secondary"
+                                icon={Upload}
+                                onClick={() => setShowImportPreview(true)}
+                            >
+                                Import
+                            </Button>
+                            {/* Hidden file input triggered by button click via modal */}
                         </div>
 
                         <Button variant="secondary" onClick={downloadTemplate} icon={FileDown} title="Download blank import template">
@@ -297,6 +301,17 @@ const AdminManage = ({
                     </div>
                 </Card>
             </section>
+
+            {/* Import Preview Modal */}
+            <ImportPreviewModal
+                isOpen={showImportPreview}
+                onClose={() => setShowImportPreview(false)}
+                existingStudentIds={students.map(s => s.studentId)}
+                onConfirm={(selectedRows) => {
+                    setShowImportPreview(false);
+                    handleUploadStudents(selectedRows);
+                }}
+            />
         </div>
     );
 };

@@ -324,97 +324,59 @@ const AdminDashboard = () => {
     return letters + digits;
   };
 
-  const handleUploadStudents = async (file) => {
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Use raw rows so we can normalize keys ourselves
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const handleUploadStudents = async (parsedRows) => {
+    // parsedRows comes pre-parsed from ImportPreviewModal
+    // Shape: [{ studentId, name, password, class, semester, selected, errors }]
+    if (!Array.isArray(parsedRows) || parsedRows.length === 0) return;
 
-      if (rawRows.length === 0) {
-        alert('The sheet is empty or has no data rows.');
-        return;
+    let count = 0;
+    let skipped = 0;
+    const importedCredentials = [];
+
+    for (const row of parsedRows) {
+      const { studentId, name, password, class: studentClass, semester } = row;
+      if (!studentId || !name) { skipped++; continue; }
+
+      try {
+        await api.post('/users', {
+          studentId,
+          name,
+          class: studentClass || 'Unknown',
+          semester: semester || 'Semester 1',
+          password
+        });
+        count++;
+        importedCredentials.push({ studentId, name, password });
+      } catch {
+        skipped++; // duplicate or server error
       }
+    }
 
-      // Normalize column keys: strip spaces, lowercase, so variants like
-      // "Student ID", "student_id", "StudentId" all map to "studentId" etc.
-      const normalize = (key) => key.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-      const keyMap = {}; // normalized -> original raw key
-      Object.keys(rawRows[0]).forEach(k => { keyMap[normalize(k)] = k; });
+    loadData();
 
-      const getField = (row, ...variants) => {
-        for (const v of variants) {
-          const raw = keyMap[normalize(v)];
-          if (raw !== undefined && row[raw] !== undefined && row[raw] !== '') {
-            return String(row[raw]).trim();
-          }
-        }
-        return '';
-      };
+    // Cache plaintext passwords so exportCredentials() can use them later
+    if (importedCredentials.length > 0) {
+      addToCredCache(importedCredentials);
+    }
 
-      let count = 0;
-      let skipped = 0;
-      const importedCredentials = [];
-
-      for (const row of rawRows) {
-        const studentId = getField(row, 'studentId', 'student_id', 'studentid', 'id', 'roll', 'rollno', 'rollnumber', 'enrollment');
-        const name = getField(row, 'name', 'studentname', 'student_name', 'fullname', 'full_name');
-
-        if (!studentId || !name) { skipped++; continue; }
-
-        // Use sheet password if provided, otherwise auto-generate from name
-        const sheetPassword = getField(row, 'password', 'pass', 'passwd');
-        const password = sheetPassword || generatePassword(name);
-        const studentClass = getField(row, 'class', 'studentclass', 'branch', 'department', 'dept');
-        const semester = getField(row, 'semester', 'sem', 'year');
-
-        try {
-          await api.post('/users', {
-            studentId,
-            name,
-            class: studentClass || 'Unknown',
-            semester: semester || 'Semester 1',
-            password
-          });
-          count++;
-          importedCredentials.push({ studentId, name, password });
-        } catch {
-          skipped++; // duplicate or server error
-        }
+    // Offer to download credentials sheet
+    if (count > 0) {
+      const downloadCreds = window.confirm(
+        `✅ Imported ${count} student(s).${skipped > 0 ? ` Skipped ${skipped} (duplicates/errors).` : ''}\n\nDownload credentials sheet?`
+      );
+      if (downloadCreds) {
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(importedCredentials.map(c => ({
+          'Student ID': c.studentId,
+          'Name': c.name,
+          'Password': c.password
+        })));
+        ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+        XLSX.writeFile(wb, 'imported_student_credentials.xlsx');
       }
-
-      loadData();
-
-      // Cache plaintext passwords so exportCredentials() can use them later
-      if (importedCredentials.length > 0) {
-        addToCredCache(importedCredentials);
-      }
-
-      // Offer to download credentials if any were imported
-      if (count > 0 && importedCredentials.length > 0) {
-        const downloadCreds = window.confirm(
-          `✅ Imported ${count} student(s).${skipped > 0 ? ` Skipped ${skipped} (duplicates/invalid).` : ''}\n\nPasswords were auto-generated. Download credentials sheet?`
-        );
-        if (downloadCreds) {
-          const wb = XLSX.utils.book_new();
-          const ws = XLSX.utils.json_to_sheet(importedCredentials.map(c => ({
-            'Student ID': c.studentId,
-            'Name': c.name,
-            'Password': c.password
-          })));
-          ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 14 }];
-          XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
-          XLSX.writeFile(wb, 'imported_student_credentials.xlsx');
-        }
-      } else if (count === 0) {
-        alert(`⚠️ 0 students imported.\n\nSkipped: ${skipped} rows.\n\nCheck that your sheet has columns named:\n• studentId (or roll, enrollment, id)\n• name (or studentName, fullName)\n\nDownload the Template to see the correct format.`);
-      } else {
-        alert(`✅ Imported ${count} student(s). Skipped ${skipped}.`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Error reading file. Make sure it is a valid .xlsx or .csv file.');
+    } else {
+      alert(`⚠️ 0 students imported. ${skipped} row(s) were skipped (duplicates or errors).`);
     }
   };
 
