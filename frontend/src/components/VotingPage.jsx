@@ -22,6 +22,7 @@ function VotingPage() {
   const [voteSubmitted, setVoteSubmitted] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(8);
   const [batchBlocked, setBatchBlocked] = useState(null); // { allowedClasses, yourClass }
+  const [batchStatus, setBatchStatus] = useState(null); // null = not yet checked, { allowed, reason, batch } when loaded
 
   // Guard: if the user has already voted, log them out immediately.
   useEffect(() => {
@@ -84,6 +85,14 @@ function VotingPage() {
 
       setPositions(positionsData);
       setCandidates(candidatesData);
+
+      // Batch status check — non-fatal
+      try {
+        const bsr = await api.get('/voting-batch/status');
+        setBatchStatus(bsr.data);
+      } catch {
+        // If unreachable, allow through (no batch restriction applied)
+      }
     } catch (err) {
       console.error('Error loading election data:', err);
       setError('Failed to load election data. Please try again.');
@@ -119,7 +128,7 @@ function VotingPage() {
     } catch (err) {
       console.error('Error submitting votes:', err);
       // Batch class restriction — show a dedicated screen
-      if (err.response?.data?.error === 'batch_not_open') {
+      if (err.response?.data?.error === 'batch_not_open' || err.response?.data?.error === 'not_in_batch') {
         setBatchBlocked({
           allowedClasses: err.response.data.allowedClasses || [],
           yourClass: err.response.data.yourClass || userProfile?.class || ''
@@ -138,6 +147,27 @@ function VotingPage() {
     return (
       <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
         <LoadingSpinner message="Loading Ballot..." />
+      </div>
+    );
+  }
+
+  // Batch status check at load time — student is not in the current batch
+  if (batchStatus && batchStatus.allowed === false) {
+    const msg = batchStatus.reason === 'not_in_batch'
+      ? 'You are not in the current voting batch. Your teacher will let you know when it is your turn.'
+      : 'No voting batch is currently open. Please wait for the admin to open a batch.';
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
+        <div className="max-w-md w-full glass-panel rounded-2xl border border-amber-500/30 bg-amber-500/5 p-8 text-center animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-8 h-8 text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">Please Wait</h2>
+          <p className="text-amber-200 mb-6 text-sm">{msg}</p>
+          <Button onClick={handleGoBack} variant="ghost" className="w-full">
+            Return to Dashboard
+          </Button>
+        </div>
       </div>
     );
   }
