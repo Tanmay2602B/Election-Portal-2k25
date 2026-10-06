@@ -154,7 +154,7 @@ function VotingPage() {
   // Batch status check at load time — student is not in the current batch
   if (batchStatus && batchStatus.allowed === false) {
     const msg = batchStatus.reason === 'not_in_batch'
-      ? 'You are not in the current voting batch. Your teacher will let you know when it is your turn.'
+      ? 'You are not in the current voting batch. Your admin will let you know when it is your turn.'
       : 'No voting batch is currently open. Please wait for the admin to open a batch.';
     return (
       <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
@@ -193,7 +193,7 @@ function VotingPage() {
           </div>
           <p className="text-gray-400 text-sm mb-6">
             Your class (<span className="text-white font-medium">{batchBlocked.yourClass}</span>) is not in the active batch.
-            Your teacher will let you know when it's your turn to vote.
+            Your admin will let you know when it's your turn to vote.
           </p>
           <Button onClick={handleGoBack} variant="ghost" className="w-full">
             Return to Dashboard
