@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Calendar, Clock, CheckCircle, AlertCircle, RefreshCw, AlertTriangle, Info, Users } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, AlertCircle, RefreshCw, AlertTriangle, Info, Users, Filter } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import LiveClock from '../LiveClock';
@@ -26,11 +26,50 @@ const AdminSchedule = ({
     formatDuration,
     handleStartVoting,
     handleEndVoting,
-    loadData
+    loadData,
+    students = []
 }) => {
     const start = votingSchedule.votingStart ? new Date(votingSchedule.votingStart) : null;
     const end = votingSchedule.votingEnd ? new Date(votingSchedule.votingEnd) : null;
     const now = new Date();
+
+    // Derive unique classes from students, sorted alphabetically
+    const availableClasses = useMemo(() => {
+        const classSet = new Set(
+            students.map(s => (s.class || '').trim()).filter(Boolean)
+        );
+        return [...classSet].sort((a, b) => a.localeCompare(b));
+    }, [students]);
+
+    // Student count per class
+    const studentCountByClass = useMemo(() => {
+        const map = {};
+        students.forEach(s => {
+            const cls = (s.class || '').trim();
+            if (cls) map[cls] = (map[cls] || 0) + 1;
+        });
+        return map;
+    }, [students]);
+
+    // Currently selected filter
+    const selectedClasses = votingSchedule.batchClassFilter || [];
+
+    const toggleClass = (cls) => {
+        const current = votingSchedule.batchClassFilter || [];
+        const next = current.includes(cls)
+            ? current.filter(c => c !== cls)
+            : [...current, cls];
+        setVotingSchedule(prev => ({ ...prev, batchClassFilter: next }));
+    };
+
+    const selectAll = () => setVotingSchedule(prev => ({ ...prev, batchClassFilter: [] }));
+    const deselectAll = () => setVotingSchedule(prev => ({ ...prev, batchClassFilter: [] }));
+
+    // Total students in selected classes (or all if none selected)
+    const filteredStudentCount = useMemo(() => {
+        if (selectedClasses.length === 0) return students.length;
+        return students.filter(s => selectedClasses.includes((s.class || '').trim())).length;
+    }, [students, selectedClasses]);
 
     // Validation
     const validation = useMemo(() => {
@@ -213,6 +252,7 @@ const AdminSchedule = ({
                         </p>
 
                         <div className="space-y-4">
+                            {/* Enable toggle */}
                             <label className="flex items-start gap-3 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-white/5">
                                 <input
                                     type="checkbox"
@@ -220,8 +260,8 @@ const AdminSchedule = ({
                                     onChange={(e) => setVotingSchedule(prev => ({
                                         ...prev,
                                         batchVotingEnabled: e.target.checked,
-                                        // default batch size if not set
-                                        batchSize: prev.batchSize || 30
+                                        batchSize: prev.batchSize || 30,
+                                        batchClassFilter: prev.batchClassFilter || []
                                     }))}
                                     className="mt-1 h-5 w-5 rounded border-gray-600 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
                                 />
@@ -234,8 +274,87 @@ const AdminSchedule = ({
                             </label>
 
                             {votingSchedule.batchVotingEnabled && (
-                                <div className="ml-8 animate-fade-in space-y-4">
-                                    {/* Batch size slider */}
+                                <div className="ml-8 animate-fade-in space-y-5">
+
+                                    {/* ── Class Filter ───────────────────────────── */}
+                                    <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <Filter size={15} className="text-indigo-400" />
+                                                <span className="text-sm font-medium text-gray-300">
+                                                    Filter by Class
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {selectedClasses.length > 0 && (
+                                                    <span className="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">
+                                                        {selectedClasses.length} selected
+                                                    </span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={selectedClasses.length === 0 ? deselectAll : selectAll}
+                                                    className="text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+                                                >
+                                                    {selectedClasses.length === 0 ? 'All classes' : 'Clear filter'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {availableClasses.length === 0 ? (
+                                            <p className="text-xs text-gray-500 italic">
+                                                No classes found. Add students with a class assigned first.
+                                            </p>
+                                        ) : (
+                                            <div className="flex flex-wrap gap-2">
+                                                {availableClasses.map(cls => {
+                                                    const isSelected = selectedClasses.includes(cls);
+                                                    const count = studentCountByClass[cls] || 0;
+                                                    return (
+                                                        <button
+                                                            key={cls}
+                                                            type="button"
+                                                            onClick={() => toggleClass(cls)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${
+                                                                isSelected
+                                                                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                                                                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
+                                                            }`}
+                                                        >
+                                                            {isSelected && (
+                                                                <CheckCircle size={13} className="text-indigo-200" />
+                                                            )}
+                                                            {cls}
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                                                isSelected
+                                                                    ? 'bg-indigo-500/40 text-indigo-100'
+                                                                    : 'bg-white/10 text-gray-400'
+                                                            }`}>
+                                                                {count}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Summary line */}
+                                        <div className="flex items-center gap-2 pt-1 text-xs text-gray-400 border-t border-white/5">
+                                            <Users size={13} />
+                                            {selectedClasses.length === 0
+                                                ? <span>All <strong className="text-white">{students.length}</strong> students eligible for batch</span>
+                                                : <span>
+                                                    <strong className="text-white">{filteredStudentCount}</strong> students
+                                                    from {selectedClasses.length === 1
+                                                        ? <strong className="text-indigo-300">{selectedClasses[0]}</strong>
+                                                        : <>{selectedClasses.slice(0, -1).map(c => <strong key={c} className="text-indigo-300">{c}</strong>).reduce((a, b) => [a, ', ', b])} &amp; <strong className="text-indigo-300">{selectedClasses[selectedClasses.length - 1]}</strong></>
+                                                    } eligible
+                                                  </span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {/* ── Batch size slider ───────────────────────── */}
                                     <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                                         <div className="flex items-center justify-between mb-3">
                                             <label className="text-sm font-medium text-gray-300">
@@ -289,8 +408,11 @@ const AdminSchedule = ({
                                         <Info size={16} className="mt-0.5 shrink-0" />
                                         <span>
                                             Up to <strong>{votingSchedule.batchSize ?? 30}</strong> ballot submissions will be
-                                            processed simultaneously. Extra requests beyond the limit are queued and processed
-                                            in the next available slot.
+                                            processed simultaneously
+                                            {selectedClasses.length > 0
+                                                ? <> for <strong>{selectedClasses.join(', ')}</strong></>
+                                                : ' across all classes'
+                                            }.
                                         </span>
                                     </div>
 

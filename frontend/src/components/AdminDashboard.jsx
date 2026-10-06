@@ -33,7 +33,8 @@ const AdminDashboard = () => {
     enableDepartmentalVoting: false,
     allowCrossDepartmentVoting: true,
     batchVotingEnabled: false,
-    batchSize: 30
+    batchSize: 30,
+    batchClassFilter: []   // [] means all classes; populated array = selected classes only
   });
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -468,6 +469,7 @@ const AdminDashboard = () => {
                 handleStartVoting={handleStartVoting}
                 handleEndVoting={handleEndVoting}
                 loadData={loadData}
+                students={students}
               />
             )}
 

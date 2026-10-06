@@ -171,19 +171,26 @@ router.post('/batch', auth, async (req, res) => {
         });
     }
 
-    // Enforce the admin-configured batchSize from settings (if batch voting is enabled)
+    // Enforce the admin-configured batchSize and batchClassFilter from settings
+    let allowedClasses = []; // empty = all classes allowed
     try {
         const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' });
-        if (scheduleSetting?.value?.batchVotingEnabled && scheduleSetting?.value?.batchSize) {
-            const configuredMax = Math.min(scheduleSetting.value.batchSize, HARD_CAP);
-            if (submissions.length > configuredMax) {
-                return res.status(400).json({
-                    msg: `Batch size ${submissions.length} exceeds the configured limit of ${configuredMax}.`
-                });
+        if (scheduleSetting?.value?.batchVotingEnabled) {
+            if (scheduleSetting.value.batchSize) {
+                const configuredMax = Math.min(scheduleSetting.value.batchSize, HARD_CAP);
+                if (submissions.length > configuredMax) {
+                    return res.status(400).json({
+                        msg: `Batch size ${submissions.length} exceeds the configured limit of ${configuredMax}.`
+                    });
+                }
+            }
+            // Honour class filter — if set, reject submissions from unlisted classes
+            if (Array.isArray(scheduleSetting.value.batchClassFilter) && scheduleSetting.value.batchClassFilter.length > 0) {
+                allowedClasses = scheduleSetting.value.batchClassFilter;
             }
         }
     } catch (_settingsErr) {
-        // If settings can't be read, fall back to the hard cap only
+        // If settings can't be read, fall back to hard cap only
     }
 
     // Process all submissions in parallel
@@ -196,6 +203,11 @@ router.post('/batch', auth, async (req, res) => {
             const user = await User.findOne({ studentId });
             if (!user) throw new Error(`Student not found: ${studentId}`);
             if (user.hasVoted) throw new Error(`${studentId} has already voted`);
+
+            // Enforce class filter if configured
+            if (allowedClasses.length > 0 && !allowedClasses.includes(user.class)) {
+                throw new Error(`${studentId} (class: ${user.class}) is not in the allowed batch classes: ${allowedClasses.join(', ')}`);
+            }
 
             const voteDocuments = ballotVotes.map(v => ({
                 userId: studentId,
