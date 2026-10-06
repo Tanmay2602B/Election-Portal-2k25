@@ -44,6 +44,27 @@ const AdminDashboard = () => {
   const [modalType, setModalType] = useState('position'); // 'position', 'candidate', 'student'
   const [editItem, setEditItem] = useState(null);
 
+  // Stores plaintext passwords from the last import/add — merged map keyed by studentId
+  // Passwords are hashed on the server, so this is the only place we can keep them
+  const [credentialsCache, setCredentialsCache] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('electionCredCache');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  // Persist cache to sessionStorage whenever it changes (survives tab refresh, clears on close)
+  const addToCredCache = (entries) => {
+    setCredentialsCache(prev => {
+      const next = { ...prev };
+      entries.forEach(({ studentId, name, password }) => {
+        next[studentId] = { name, password };
+      });
+      try { sessionStorage.setItem('electionCredCache', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   // --- Data Loading & Effects ---
 
   useEffect(() => {
@@ -182,6 +203,10 @@ const AdminDashboard = () => {
   const handleAddStudent = async (formData) => {
     try {
       await api.post('/users', formData);
+      // Cache plaintext password before it's hashed on the server
+      if (formData.studentId && formData.password) {
+        addToCredCache([{ studentId: formData.studentId, name: formData.name || '', password: formData.password }]);
+      }
       setShowModal(false);
       loadData();
     } catch (error) {
@@ -353,6 +378,11 @@ const AdminDashboard = () => {
 
       loadData();
 
+      // Cache plaintext passwords so exportCredentials() can use them later
+      if (importedCredentials.length > 0) {
+        addToCredCache(importedCredentials);
+      }
+
       // Offer to download credentials if any were imported
       if (count > 0 && importedCredentials.length > 0) {
         const downloadCreds = window.confirm(
@@ -399,11 +429,20 @@ const AdminDashboard = () => {
 
   const exportCredentials = () => {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(students.map(s => ({
-      ID: s.studentId, Name: s.name, Password: "Hash Hidden"
-    })));
-    XLSX.utils.book_append_sheet(wb, ws, "Credentials");
-    XLSX.writeFile(wb, "student_credentials.xlsx");
+    const rows = students.map(s => {
+      const cached = credentialsCache[s.studentId];
+      return {
+        'Student ID': s.studentId,
+        'Name': s.name,
+        'Class': s.class || '',
+        'Semester': s.semester || '',
+        'Password': cached?.password || '⚠ Not available (re-import to retrieve)'
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Note: 'No students found' }]);
+    ws['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 36 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+    XLSX.writeFile(wb, 'student_credentials.xlsx');
   };
 
   const exportStudentsBySemester = () => exportCredentials();
