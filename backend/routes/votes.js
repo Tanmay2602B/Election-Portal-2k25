@@ -124,6 +124,24 @@ router.delete('/cooldown/:className', auth, (req, res) => {
     res.json({ msg: `Cooldown cleared for class "${req.params.className}"` });
 });
 
+// ─── ADMIN — manually start a class cooldown (called when admin stops a batch) ─
+/**
+ * POST /api/votes/cooldown/start
+ * Starts a 2-minute cooldown for a given class.
+ * Body: { className: "BBA" }
+ */
+router.post('/cooldown/start', auth, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+    const { className } = req.body;
+    if (!className) return res.status(400).json({ msg: 'className is required' });
+    startClassCooldown(className, 'batch');
+    const state = getCooldownState();
+    res.json({
+        msg: `2-minute cooldown started for class "${className}"`,
+        cooldown: state[className] || null
+    });
+});
+
 // ─── STUDENT — individual vote submission ─────────────────────────────────────
 /**
  * POST /api/votes
