@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Vote from '../models/Vote.js';
 import User from '../models/User.js';
 import Position from '../models/Position.js';
@@ -174,7 +175,7 @@ router.post(
 
             // 4. Atomic slot claim — fails if batch is already at capacity
             const slotClaimed = await VotingBatch.findOneAndUpdate(
-                { _id: 'current', status: 'open', activeSubmissions: { $lt: 100 } },
+                { _id: 'current', status: 'open', batchNumber: batch.batchNumber, activeSubmissions: { $lt: 100 } },
                 { $inc: { activeSubmissions: 1 } },
                 { new: true }
             );
@@ -187,7 +188,10 @@ router.post(
             if (!user) return res.status(404).json({ msg: 'Student not found' });
             if (user.hasVoted) {
                 // Release the slot we just claimed
-                await VotingBatch.findByIdAndUpdate('current', { $inc: { activeSubmissions: -1 } });
+                await VotingBatch.findOneAndUpdate(
+                    { _id: 'current', batchNumber: batch.batchNumber },
+                    { $inc: { activeSubmissions: -1 } }
+                );
                 return res.status(400).json({ msg: 'You have already voted' });
             }
 
@@ -198,14 +202,28 @@ router.post(
                 studentClass: user.class
             }));
 
-            await Vote.insertMany(voteDocuments);
-            await User.findOneAndUpdate(
-                { studentId: userId },
-                { hasVoted: true, voteTimestamp: new Date() }
-            );
+            const session = await mongoose.startSession();
+            session.startTransaction();
+            try {
+                await Vote.insertMany(voteDocuments, { session });
+                await User.findOneAndUpdate(
+                    { studentId: userId },
+                    { hasVoted: true, voteTimestamp: new Date() },
+                    { session }
+                );
+                await session.commitTransaction();
+            } catch (err) {
+                await session.abortTransaction();
+                throw err;
+            } finally {
+                session.endSession();
+            }
 
             // Release the active submissions slot
-            await VotingBatch.findByIdAndUpdate('current', { $inc: { activeSubmissions: -1 } });
+            await VotingBatch.findOneAndUpdate(
+                { _id: 'current', batchNumber: batch.batchNumber },
+                { $inc: { activeSubmissions: -1 } }
+            );
 
             // Auto-close: if no unvoted students remain in this batch, start cooldown
             const remaining = await User.countDocuments({
@@ -213,13 +231,16 @@ router.post(
                 hasVoted: false
             });
             if (remaining === 0) {
-                await VotingBatch.findByIdAndUpdate('current', {
-                    $set: {
-                        status: 'cooldown',
-                        cooldownUntil: new Date(Date.now() + 120_000),
-                        lastUpdatedAt: new Date()
+                await VotingBatch.findOneAndUpdate(
+                    { _id: 'current', status: 'open', batchNumber: batch.batchNumber },
+                    {
+                        $set: {
+                            status: 'cooldown',
+                            cooldownUntil: new Date(Date.now() + 120_000),
+                            lastUpdatedAt: new Date()
+                        }
                     }
-                });
+                );
             }
 
             res.json({ msg: 'Votes submitted successfully' });

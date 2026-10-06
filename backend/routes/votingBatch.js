@@ -175,7 +175,7 @@ router.post('/', auth, adminOnly, async (req, res) => {
         const now = new Date();
 
         const updatedBatch = await VotingBatch.findOneAndUpdate(
-            { _id: 'current' },
+            { _id: 'current', batchNumber: prevBatch?.batchNumber || 0 },
             {
                 $set: {
                     status: 'open',
@@ -190,6 +190,10 @@ router.post('/', auth, adminOnly, async (req, res) => {
             },
             { upsert: true, new: true }
         );
+
+        if (!updatedBatch) {
+            return res.status(409).json({ error: 'conflict', msg: 'Batch state changed concurrently. Please try again.' });
+        }
 
         res.json({ msg: 'Batch opened successfully.', batch: updatedBatch });
     } catch (err) {
@@ -213,7 +217,7 @@ router.post('/close', auth, adminOnly, async (req, res) => {
         const cooldownUntil = new Date(now.getTime() + 120_000); // 2 minutes
 
         const updatedBatch = await VotingBatch.findOneAndUpdate(
-            { _id: 'current' },
+            { _id: 'current', batchNumber: batch.batchNumber },
             {
                 $set: {
                     status: 'cooldown',
@@ -223,6 +227,10 @@ router.post('/close', auth, adminOnly, async (req, res) => {
             },
             { new: true }
         );
+
+        if (!updatedBatch) {
+            return res.status(409).json({ error: 'conflict', msg: 'Batch state changed concurrently.' });
+        }
 
         res.json({ msg: 'Batch closed. 2-minute cooldown started.', batch: updatedBatch });
     } catch (err) {
@@ -244,7 +252,7 @@ router.post('/clear-cooldown', auth, adminOnly, async (req, res) => {
 
         const now = new Date();
         const updatedBatch = await VotingBatch.findOneAndUpdate(
-            { _id: 'current' },
+            { _id: 'current', batchNumber: batch.batchNumber },
             {
                 $set: {
                     status: 'idle',
@@ -254,6 +262,10 @@ router.post('/clear-cooldown', auth, adminOnly, async (req, res) => {
             },
             { new: true }
         );
+
+        if (!updatedBatch) {
+            return res.status(409).json({ error: 'conflict', msg: 'Batch state changed concurrently.' });
+        }
 
         res.json({ msg: 'Cooldown cleared. Ready for next batch.', batch: updatedBatch });
     } catch (err) {
