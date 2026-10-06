@@ -96,7 +96,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         setSelectedClass(cls);
         if (cls) {
             const unvoted = students.filter(s => (s.class || '').trim() === cls && !s.hasVoted);
-            setSelectedStudentIds(new Set(unvoted.map(s => s._id || s.studentId)));
+            setSelectedStudentIds(new Set(unvoted.map(s => s.studentId)));
         } else {
             setSelectedStudentIds(new Set());
         }
@@ -108,13 +108,13 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         return students.filter(s => (s.class || '').trim() === selectedClass && !s.hasVoted);
     }, [students, selectedClass]);
 
-    const allSelected = unvotedStudents.length > 0 && unvotedStudents.every(s => selectedStudentIds.has(s._id || s.studentId));
+    const allSelected = unvotedStudents.length > 0 && unvotedStudents.every(s => selectedStudentIds.has(s.studentId));
 
     const handleSelectAll = () => {
         if (allSelected) {
             setSelectedStudentIds(new Set());
         } else {
-            setSelectedStudentIds(new Set(unvotedStudents.map(s => s._id || s.studentId)));
+            setSelectedStudentIds(new Set(unvotedStudents.map(s => s.studentId)));
         }
     };
 
@@ -275,7 +275,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                             ) : (
                                 <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
                                     {unvotedStudents.map(s => {
-                                        const sid = s._id || s.studentId;
+                                        const sid = s.studentId;
                                         const checked = selectedStudentIds.has(sid);
                                         return (
                                             <label key={sid} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors">
