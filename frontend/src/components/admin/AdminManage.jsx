@@ -27,14 +27,22 @@ const AdminManage = ({
     // Download a blank import template
     const downloadTemplate = () => {
         const templateData = [
-            { studentId: 'S001', name: 'John Doe', class: 'BCA-1', semester: 'Semester 1', password: 'password123' },
-            { studentId: 'S002', name: 'Jane Smith', class: 'BCA-2', semester: 'Semester 3', password: 'password123' },
+            { studentId: 'S001', name: 'John Doe',    class: 'BCA-1', semester: 'Semester 1', password: '' },
+            { studentId: 'S002', name: 'Jane Smith',  class: 'BCA-2', semester: 'Semester 3', password: '' },
+            { studentId: 'S003', name: 'Raj Kumar',   class: 'MCA-1', semester: 'Semester 2', password: '' },
+        ];
+        // Note row explaining accepted column variants
+        const noteSheet = [
+            { 'INFO': 'Leave the password column EMPTY — an 8-character password will be auto-generated (e.g. john1234).' },
+            { 'INFO': 'Accepted column names:  studentId / roll / rollno / enrollment / id   |   name / studentName / fullName   |   class / branch / department   |   semester / sem / year' },
         ];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(templateData);
-        // Set column widths for readability
-        ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+        ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
         XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
+        const wsNote = XLSX.utils.json_to_sheet(noteSheet);
+        wsNote['!cols'] = [{ wch: 100 }];
+        XLSX.utils.book_append_sheet(wb, wsNote, 'README');
         XLSX.writeFile(wb, 'student_import_template.xlsx');
     };
 
