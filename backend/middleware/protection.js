@@ -39,7 +39,7 @@ export const helmetMiddleware = helmet();
 // ─── 2. Global rate limiter ───────────────────────────────────────────────────
 export const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,   // 15 minutes
-    max: 200,                    // requests per IP per window
+    max: 500,                    // raised: admin dashboards make many API calls
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -66,6 +66,17 @@ export const voteLimiter = rateLimit({
     legacyHeaders: false,
     message: {
         error: 'Too many vote submissions from this IP. Please wait before trying again.'
+    }
+});
+
+// ─── Admin/settings limiter (generous — admin does many writes) ───────────────
+export const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,                   // admin can do many saves, polls, etc.
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: 'Too many admin requests. Please wait before trying again.'
     }
 });
 

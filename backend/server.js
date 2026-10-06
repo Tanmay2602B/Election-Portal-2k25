@@ -12,7 +12,8 @@ import announcementRoutes from './routes/announcements.js';
 import {
     helmetMiddleware,
     globalLimiter,
-    authLimiter
+    authLimiter,
+    adminLimiter
 } from './middleware/protection.js';
 
 dotenv.config();
@@ -77,12 +78,15 @@ mongoose.connect(MONGODB_URI)
 // Auth gets its own tighter limiter (brute-force login protection)
 app.use('/api/auth', authLimiter, authRoutes);
 
-app.use('/api/users', userRoutes);
-app.use('/api/positions', positionRoutes);
-app.use('/api/candidates', candidateRoutes);
+// Admin-operated routes get a generous limiter (dashboard makes many calls)
+app.use('/api/users',         adminLimiter, userRoutes);
+app.use('/api/positions',     adminLimiter, positionRoutes);
+app.use('/api/candidates',    adminLimiter, candidateRoutes);
+app.use('/api/settings',      adminLimiter, settingRoutes);
+app.use('/api/announcements', adminLimiter, announcementRoutes);
+
+// Votes: uses its own internal per-route limiters (voteLimiter, concurrentVoteGate)
 app.use('/api/votes', voteRoutes);
-app.use('/api/settings', settingRoutes);
-app.use('/api/announcements', announcementRoutes);
 
 // ─── 404 fallback ────────────────────────────────────────────────────────────
 app.use((req, res) => {

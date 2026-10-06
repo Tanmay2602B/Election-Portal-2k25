@@ -120,18 +120,26 @@ const ClassVotingBatchPanel = ({ votingSchedule, setVotingSchedule, availableCla
         setOpeningError('');
         hasRunRef.current = true;
 
+        // Build the new schedule first — don't rely on stale prop in async context
         const newSchedule = {
             ...votingSchedule,
             batchClassFilter: [selectedClass],
             batchVotingEnabled: true
         };
-        setVotingSchedule(prev => ({ ...prev, batchClassFilter: [selectedClass], batchVotingEnabled: true }));
-        setBatchStatus('open');
 
+        // Persist to backend FIRST — only update local state on success
         try {
             await api.post('/settings', { key: 'votingSchedule', value: newSchedule });
+            // Only mark as open after the backend confirms
+            setVotingSchedule(prev => ({
+                ...prev,
+                batchClassFilter: [selectedClass],
+                batchVotingEnabled: true
+            }));
+            setBatchStatus('open');
         } catch (err) {
-            setOpeningError(err.response?.data?.msg || 'Failed to open batch. Try again.');
+            const msg = err.response?.data?.msg || err.response?.data?.error || err.message || '';
+            setOpeningError(`Failed to open batch: ${msg || 'Server error. Please try again.'}`);
             setBatchStatus('idle');
         }
     };
@@ -141,30 +149,22 @@ const ClassVotingBatchPanel = ({ votingSchedule, setVotingSchedule, availableCla
         if (!selectedClass) return;
         setOpeningError('');
 
-        // Clear the class filter on backend (closes the batch)
         const newSchedule = { ...votingSchedule, batchClassFilter: [] };
+
+        // Update local state immediately so the UI responds
         setVotingSchedule(prev => ({ ...prev, batchClassFilter: [] }));
-
-        try {
-            await api.post('/settings', { key: 'votingSchedule', value: newSchedule });
-        } catch {
-            // non-fatal — still start local cooldown
-        }
-
-        // Start 2-min cooldown on backend for this class
-        try {
-            // Trigger via a tiny batch call with empty submissions just to register cooldown,
-            // or use a dedicated endpoint. We call the backend cooldown indirectly by POSTing
-            // a batch with the class — backend will reject empty but cooldown logic runs.
-            // Better: call a dedicated admin cooldown-start if available, else just start locally.
-            // We'll call the backend to set cooldown for this class via a direct settings approach:
-            await api.post('/votes/cooldown/start', { className: selectedClass });
-        } catch {
-            // endpoint may not exist yet — start cooldown locally anyway
-        }
-
         setCooldownSecs(COOLDOWN_TOTAL);
         setBatchStatus('cooldown');
+
+        // Persist to backend (non-fatal if fails)
+        try {
+            await api.post('/settings', { key: 'votingSchedule', value: newSchedule });
+        } catch { /* non-fatal */ }
+
+        // Register cooldown on backend
+        try {
+            await api.post('/votes/cooldown/start', { className: selectedClass });
+        } catch { /* non-fatal — local countdown already started */ }
     };
 
     // ── Clear cooldown early ──────────────────────────────────────────────────
