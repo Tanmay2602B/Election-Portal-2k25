@@ -329,54 +329,58 @@ const AdminDashboard = () => {
     // Shape: [{ studentId, name, password, class, semester, selected, errors }]
     if (!Array.isArray(parsedRows) || parsedRows.length === 0) return;
 
-    let count = 0;
-    let skipped = 0;
-    const importedCredentials = [];
+    try {
+      // Send ALL rows in a single bulk request — avoids rate-limit issues
+      const res = await api.post('/users/bulk', {
+        students: parsedRows.map(r => ({
+          studentId: r.studentId,
+          name: r.name,
+          password: r.password,
+          class: r.class || 'Unknown',
+          semester: r.semester || 'Semester 1'
+        }))
+      });
 
-    for (const row of parsedRows) {
-      const { studentId, name, password, class: studentClass, semester } = row;
-      if (!studentId || !name) { skipped++; continue; }
+      const { imported, skipped, results: rowResults } = res.data;
 
-      try {
-        await api.post('/users', {
-          studentId,
-          name,
-          class: studentClass || 'Unknown',
-          semester: semester || 'Semester 1',
-          password
-        });
-        count++;
-        importedCredentials.push({ studentId, name, password });
-      } catch {
-        skipped++; // duplicate or server error
+      loadData();
+
+      // Cache plaintext passwords for the successfully imported rows
+      const importedCredentials = parsedRows
+        .filter(r => rowResults.find(rr => rr.studentId === r.studentId && rr.status === 'imported'))
+        .map(r => ({ studentId: r.studentId, name: r.name, password: r.password }));
+
+      if (importedCredentials.length > 0) {
+        addToCredCache(importedCredentials);
       }
-    }
 
-    loadData();
-
-    // Cache plaintext passwords so exportCredentials() can use them later
-    if (importedCredentials.length > 0) {
-      addToCredCache(importedCredentials);
-    }
-
-    // Offer to download credentials sheet
-    if (count > 0) {
-      const downloadCreds = window.confirm(
-        `✅ Imported ${count} student(s).${skipped > 0 ? ` Skipped ${skipped} (duplicates/errors).` : ''}\n\nDownload credentials sheet?`
-      );
-      if (downloadCreds) {
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(importedCredentials.map(c => ({
-          'Student ID': c.studentId,
-          'Name': c.name,
-          'Password': c.password
-        })));
-        ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 14 }];
-        XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
-        XLSX.writeFile(wb, 'imported_student_credentials.xlsx');
+      // Build human-readable summary
+      const failedRows = rowResults.filter(r => r.status === 'failed');
+      let msg = `✅ Imported ${imported} of ${parsedRows.length} student(s).`;
+      if (failedRows.length > 0) {
+        msg += `\n\n⚠️ ${skipped} row(s) were NOT imported:\n`;
+        msg += failedRows.map(f => `• [${f.studentId}] — ${f.reason}`).join('\n');
       }
-    } else {
-      alert(`⚠️ 0 students imported. ${skipped} row(s) were skipped (duplicates or errors).`);
+
+      if (imported > 0) {
+        const downloadCreds = window.confirm(msg + '\n\nDownload credentials sheet for imported students?');
+        if (downloadCreds) {
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.json_to_sheet(importedCredentials.map(c => ({
+            'Student ID': c.studentId,
+            'Name': c.name,
+            'Password': c.password
+          })));
+          ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 14 }];
+          XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+          XLSX.writeFile(wb, 'imported_student_credentials.xlsx');
+        }
+      } else {
+        alert(msg);
+      }
+    } catch (err) {
+      console.error('Bulk import error:', err);
+      alert('Import failed: ' + (err.response?.data?.msg || err.message || 'Server error'));
     }
   };
 

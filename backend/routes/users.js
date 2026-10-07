@@ -52,6 +52,69 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
+// POST /api/users/bulk — Admin: import many students in ONE request
+// Body: { students: [{ studentId, name, password, class, semester }, ...] }
+// Returns: { imported, skipped, results: [{ studentId, status, reason? }] }
+router.post('/bulk', auth, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
+
+    const { students } = req.body;
+    if (!Array.isArray(students) || students.length === 0) {
+        return res.status(400).json({ msg: 'students must be a non-empty array' });
+    }
+
+    // Fetch all existing studentIds in one query to detect duplicates fast
+    const incomingIds = students.map(s => s.studentId).filter(Boolean);
+    const existing = await User.find({ studentId: { $in: incomingIds } }).select('studentId').lean();
+    const existingSet = new Set(existing.map(u => u.studentId));
+
+    // Hash all passwords in parallel (bcrypt is CPU-bound — cap concurrency to 10)
+    const HASH_ROUNDS = 10;
+    const results = [];
+    const toInsert = [];
+
+    for (const s of students) {
+        const { studentId, name, password, class: studentClass, semester } = s;
+        if (!studentId || !name) {
+            results.push({ studentId: studentId || '(missing)', status: 'failed', reason: 'Missing studentId or name' });
+            continue;
+        }
+        if (existingSet.has(studentId)) {
+            results.push({ studentId, status: 'failed', reason: 'User already exists' });
+            continue;
+        }
+        toInsert.push({ studentId, name, password: password || 'password123', class: studentClass || 'Unknown', semester: semester || 'Semester 1' });
+    }
+
+    // Hash passwords in batches of 10 to avoid blocking the event loop
+    const BATCH = 10;
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+        const chunk = toInsert.slice(i, i + BATCH);
+        await Promise.all(chunk.map(async (s) => {
+            try {
+                const hashed = await bcrypt.hash(s.password, HASH_ROUNDS);
+                await User.create({
+                    studentId: s.studentId,
+                    name: s.name,
+                    password: hashed,
+                    class: s.class,
+                    semester: s.semester,
+                    role: 'student'
+                });
+                results.push({ studentId: s.studentId, status: 'imported' });
+            } catch (err) {
+                const reason = err.code === 11000 ? 'User already exists (duplicate key)' : (err.message || 'Server error');
+                results.push({ studentId: s.studentId, status: 'failed', reason });
+            }
+        }));
+    }
+
+    const imported = results.filter(r => r.status === 'imported').length;
+    const skipped  = results.filter(r => r.status === 'failed').length;
+
+    res.json({ imported, skipped, total: students.length, results });
+});
+
 // PUT /api/users/:id — Admin: update a student
 router.put('/:id', auth, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
