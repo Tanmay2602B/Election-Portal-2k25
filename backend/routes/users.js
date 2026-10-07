@@ -69,7 +69,8 @@ router.post('/bulk', auth, async (req, res) => {
     const existingSet = new Set(existing.map(u => u.studentId));
 
     // Hash all passwords in parallel (bcrypt is CPU-bound — cap concurrency to 10)
-    const HASH_ROUNDS = 10;
+    // Use 8 rounds (vs 10 for single inserts) — still very secure, ~4x faster per hash
+    const HASH_ROUNDS = 8;
     const results = [];
     const toInsert = [];
 

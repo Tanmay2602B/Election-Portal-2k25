@@ -331,6 +331,8 @@ const AdminDashboard = () => {
 
     try {
       // Send ALL rows in a single bulk request — avoids rate-limit issues
+      // Use a generous per-request timeout (120s) since bcrypt hashing N students
+      // takes longer than the default 15s axios timeout.
       const res = await api.post('/users/bulk', {
         students: parsedRows.map(r => ({
           studentId: r.studentId,
@@ -339,7 +341,7 @@ const AdminDashboard = () => {
           class: r.class || 'Unknown',
           semester: r.semester || 'Semester 1'
         }))
-      });
+      }, { timeout: 120_000 });
 
       const { imported, skipped, results: rowResults } = res.data;
 
