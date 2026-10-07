@@ -72,6 +72,11 @@ export const AuthProvider = ({ children }) => {
   const checkVotingSchedule = refreshVotingSchedule;
 
   const isVotingActive = () => {
+    if (votingSchedule?.votingEnd) {
+      if (new Date() > new Date(votingSchedule.votingEnd)) {
+        return false;
+      }
+    }
     return votingSchedule?.isActive || false;
   };
 
@@ -81,6 +86,17 @@ export const AuthProvider = ({ children }) => {
     const now = new Date();
     const start = votingSchedule.votingStart ? new Date(votingSchedule.votingStart) : null;
     const end = votingSchedule.votingEnd ? new Date(votingSchedule.votingEnd) : null;
+
+    // Time window passed checks
+    if (end && !isNaN(end) && now > end) {
+      return {
+        status: 'ended',
+        message: 'Voting period has ended.',
+        countdown: false,
+        startTime: votingSchedule.votingStart,
+        endTime: votingSchedule.votingEnd
+      };
+    }
 
     // isActive is the admin's authoritative override — always respect it first
     if (votingSchedule.isActive) {
@@ -104,14 +120,6 @@ export const AuthProvider = ({ children }) => {
           startTime: votingSchedule.votingStart,
           endTime: votingSchedule.votingEnd,
           timeRemaining: start.getTime() - now.getTime()
-        };
-      } else if (now > end) {
-        return {
-          status: 'ended',
-          message: 'Voting period has ended.',
-          countdown: false,
-          startTime: votingSchedule.votingStart,
-          endTime: votingSchedule.votingEnd
         };
       } else {
         // Within window but isActive=false → admin has not opened it yet

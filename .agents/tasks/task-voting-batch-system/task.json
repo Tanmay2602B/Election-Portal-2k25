@@ -1,0 +1,7 @@
+{
+  "task_id": "task-voting-batch-system",
+  "task_description": "Replace the existing Class Voting Batch system with a new one backed by a MongoDB VotingBatch singleton. Backend: new model, new route file, inline guard on POST /votes. Frontend: new VotingBatchPanel in AdminSchedule, upfront batch check in VotingPage.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

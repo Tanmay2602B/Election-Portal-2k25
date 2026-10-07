@@ -1,0 +1,29 @@
+{
+  "project_type": "Node/Express backend (ESM) + React/Vite frontend (SPA), connected via Axios",
+  "language": "JavaScript (ESM, no TypeScript)",
+  "build_system": "Backend: plain node (no bundler). Frontend: Vite. Backend has no compile step — errors surface at startup. Frontend build: `npm run build` in `frontend/`.",
+  "test_framework": "None configured. Verification = backend starts cleanly (`node server.js`) + frontend builds cleanly (`npm run build`).",
+  "build_command": "cd e:\\election-portaltab\\frontend && npm run build",
+  "test_command": "cd e:\\election-portaltab\\backend && node server.js (starts, check for import/syntax errors, then Ctrl+C)",
+  "verification_instructions": "1. Start backend: `cd e:\\election-portaltab\\backend && node server.js` — must log 'Server running on port 5000' and 'Connected to MongoDB' without errors. 2. Build frontend: `cd e:\\election-portaltab\\frontend && npm run build` — must complete with no errors.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "ESM throughout — all imports must use .js extensions. No new npm packages (neither backend nor frontend). Backend package.json has `\"type\":\"module\"`. Mongoose 9 — no deprecated `.save()` patterns on subdocs. Express 5 — async handler errors are auto-caught.",
+  "contribution_requirements": "Keep all existing routes intact. The POST /api/votes/batch endpoint and all GET/DELETE cooldown endpoints in votes.js must not be removed. The 404 handler in server.js must remain the last route.",
+  "key_patterns": "Auth middleware (`middleware/auth.js`) sets `req.user = { id, role }` from JWT. Admin check: `if (req.user.role !== 'admin') return res.status(403)`. Mongoose upsert pattern: `Model.findOneAndUpdate({_id:'key'}, {$set:{...}}, {upsert:true, new:true})`. Frontend API calls: `import api from '../../utils/api'` (or `'../utils/api'`), then `api.get('/path')` / `api.post('/path', body)` — baseURL is `/api` so paths are relative to that. UI components: `Button` (variants: primary/secondary/danger/success/ghost, accepts `icon` prop), `Card` (glass-panel wrapper). Lucide icons from `lucide-react`. Tailwind CSS utility classes with `glass-panel`, `glass-input`, `glass-button` custom classes.",
+  "relevant_files": [
+    "e:\\election-portaltab\\backend\\models\\VotingBatch.js",
+    "e:\\election-portaltab\\backend\\routes\\votingBatch.js",
+    "e:\\election-portaltab\\backend\\routes\\votes.js",
+    "e:\\election-portaltab\\backend\\server.js",
+    "e:\\election-portaltab\\backend\\middleware\\auth.js",
+    "e:\\election-portaltab\\backend\\middleware\\protection.js",
+    "e:\\election-portaltab\\backend\\models\\User.js",
+    "e:\\election-portaltab\\backend\\models\\Settings.js",
+    "e:\\election-portaltab\\frontend\\src\\components\\admin\\AdminSchedule.jsx",
+    "e:\\election-portaltab\\frontend\\src\\components\\VotingPage.jsx",
+    "e:\\election-portaltab\\frontend\\src\\utils\\api.js",
+    "e:\\election-portaltab\\frontend\\src\\components\\ui\\Button.jsx",
+    "e:\\election-portaltab\\frontend\\src\\components\\ui\\Card.jsx"
+  ],
+  "directory_structure": "e:\\election-portaltab\\backend\\ — Express server (server.js, routes/, models/, middleware/). e:\\election-portaltab\\frontend\\ — Vite+React SPA (src/components/, src/utils/, src/contexts/). e:\\election-portaltab\\.agents\\tasks\\ — planning artifacts (never committed)."
+}

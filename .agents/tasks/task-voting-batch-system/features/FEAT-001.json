@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Backend: Create VotingBatch Mongoose model (singleton _id:'current'), create the votingBatch.js Express router with 5 endpoints, modify votes.js POST / to use inline VotingBatch guard (removing batchClassGate/classVoteCooldownGate middleware), and register the new router in server.js before the 404 handler.",
+  "status": "completed",
+  "steps": [
+    "CREATE e:\\election-portaltab\\backend\\models\\VotingBatch.js. ESM module. Mongoose schema with fields: status (String enum ['idle','open','cooldown'], default 'idle'), className (String), studentIds ([String], default []), activeSubmissions (Number, default 0), batchNumber (Number, default 0), openedAt (Date), cooldownUntil (Date), lastUpdatedAt (Date). Export as mongoose.model('VotingBatch', schema). No _id override in schema options — instead, any doc creation must pass _id:'current' explicitly (or use findOneAndUpdate with upsert). Actually: add `{ _id: false }` is wrong — instead declare _id as String in the schema: `_id: { type: String, default: 'current' }` so the model never creates a random ObjectId.",
+    "CREATE e:\\election-portaltab\\backend\\routes\\votingBatch.js. ESM Express router. Import: express, VotingBatch from '../models/VotingBatch.js', User from '../models/User.js', Setting from '../models/Settings.js', auth from '../middleware/auth.js'. Admin guard helper: `const adminOnly = (req,res,next)=>{ if(req.user.role!=='admin') return res.status(403).json({msg:'Access denied'}); next(); };`. Implement all 5 routes as described in plan.md item 2. For GET / (admin): use `VotingBatch.findOneAndUpdate({_id:'current'},{$setOnInsert:{status:'idle',studentIds:[],activeSubmissions:0,batchNumber:0}},{upsert:true,new:true})` to ensure the doc always exists. For GET /status: if batch.status==='open' AND batch.studentIds.includes(req.user.id) return {allowed:true,reason:null,batch}; if batch.status!=='open' return {allowed:false,reason:'batch_not_open',batch}; if not in studentIds return {allowed:false,reason:'not_in_batch',batch}. For POST / (open batch): validate isActive from Setting key='votingSchedule', then validate batch status, then validate studentIds array (1-100 length), then User.find({studentId:{$in:studentIds}}) and cross-check existence + class + hasVoted. For POST /close: set status:'cooldown', cooldownUntil:new Date(Date.now()+120000). For POST /clear-cooldown: set status:'idle', cooldownUntil:null.",
+    "MODIFY e:\\election-portaltab\\backend\\routes\\votes.js — two changes: (A) In the import from '../middleware/protection.js', remove batchClassGate and classVoteCooldownGate from the destructured import list. (B) On the POST '/' route: remove batchClassGate and classVoteCooldownGate from the middleware array. At the top of the async handler body (before the existing `const user = await User.findOne(...)` line), insert the inline VotingBatch guard: (1) `import VotingBatch from '../models/VotingBatch.js'` at the top of the file; (2) fetch batch and check status==='open'; (3) check studentIds.includes(req.user.id); (4) atomic increment with $lt:100 condition. After the `User.findOneAndUpdate({hasVoted:true})` call, add: decrement activeSubmissions, count remaining unvoted students in batch.studentIds, auto-close if zero remain.",
+    "MODIFY e:\\election-portaltab\\backend\\server.js — add `import votingBatchRoutes from './routes/votingBatch.js';` with the other route imports, then add `app.use('/api/voting-batch', adminLimiter, votingBatchRoutes);` after the existing `app.use('/api/votes', voteRoutes);` line and before the 404 handler. adminLimiter is already imported from './middleware/protection.js'."
+  ],
+  "acceptance_criteria": [
+    "Backend starts without any import or syntax errors: `node server.js` logs 'Server running on port 5000'",
+    "GET /api/voting-batch with admin JWT returns {batch:{status:'idle',...}, roster:[], remainingCount:0} when no batch is open",
+    "GET /api/voting-batch/status with a student JWT returns {allowed:false, reason:'batch_not_open', batch:{status:'idle',...}} when batch is idle",
+    "POST /api/voting-batch with admin JWT, valid className and studentIds, returns the opened batch doc with status:'open'",
+    "POST /api/voting-batch/close with admin JWT returns batch with status:'cooldown' and cooldownUntil set ~2 minutes in the future",
+    "POST /api/voting-batch/clear-cooldown with admin JWT returns batch with status:'idle'",
+    "POST /api/votes with a student not in the current batch returns 403 {error:'not_in_batch'}",
+    "POST /api/votes with no open batch returns 429 {error:'batch_not_open'}",
+    "All previously existing routes in votes.js (GET /stats, GET /results, GET /, GET /cooldown, DELETE /cooldown/:className, POST /cooldown/start, POST /batch) continue to work"
+  ],
+  "verification": [
+    "cd e:\\election-portaltab\\backend && node server.js — must start cleanly with no errors, then Ctrl+C"
+  ],
+  "blocked_reason": null,
+  "findings": "VotingBatch model uses { _id: false } schema option so Mongoose uses the declared _id:String field. Server starts cleanly (verified). batchClassGate and classVoteCooldownGate removed from votes.js POST / — startClassCooldown/getCooldownState/clearClassCooldown remain for /batch and /cooldown routes. The inline guard order: fetch batch → status open → studentIds.includes(userId) → atomic $lt:100 increment → after vote save: decrement + auto-close if remaining===0. /api/voting-batch registered with adminLimiter before 404 handler in server.js. Note: GET /status uses adminLimiter from server.js but the route itself only requires auth (not adminOnly) — any authenticated user can call it."
+}

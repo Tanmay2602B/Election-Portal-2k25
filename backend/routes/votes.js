@@ -168,6 +168,14 @@ router.post(
                 return res.status(429).json({ error: 'batch_not_open' });
             }
 
+            // 2.5 Schedule must not be over
+            const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' }).lean();
+            if (scheduleSetting?.value?.votingEnd) {
+                if (new Date() > new Date(scheduleSetting.value.votingEnd)) {
+                    return res.status(403).json({ error: 'voting_ended', msg: 'Voting schedule has ended' });
+                }
+            }
+
             // 3. Student must be listed in this batch
             if (!batch.studentIds.includes(userId)) {
                 return res.status(403).json({ error: 'not_in_batch' });
@@ -293,6 +301,12 @@ router.post('/batch', auth, concurrentVoteGate, async (req, res) => {
     let allowedClasses = [];
     try {
         const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' });
+        
+        if (scheduleSetting?.value?.votingEnd) {
+            if (new Date() > new Date(scheduleSetting.value.votingEnd)) {
+                return res.status(403).json({ error: 'voting_ended', msg: 'Voting schedule has ended' });
+            }
+        }
         if (scheduleSetting?.value?.batchVotingEnabled) {
             if (scheduleSetting.value.batchSize) {
                 const configuredMax = Math.min(scheduleSetting.value.batchSize, HARD_CAP);

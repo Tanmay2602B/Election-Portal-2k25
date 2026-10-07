@@ -104,9 +104,20 @@ router.post('/', auth, adminOnly, async (req, res) => {
     try {
         const { className, studentIds } = req.body;
 
-        // (a) Validate voting is active
+        // (a) Validate voting is active and schedule is not over
         const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' }).lean();
-        if (!scheduleSetting?.value?.isActive) {
+        const settings = scheduleSetting?.value || {};
+        
+        if (settings.votingEnd) {
+            if (new Date() > new Date(settings.votingEnd)) {
+                return res.status(400).json({
+                    error: 'voting_ended',
+                    msg: 'Voting schedule has ended. Cannot open new batches.'
+                });
+            }
+        }
+
+        if (!settings.isActive) {
             return res.status(400).json({
                 error: 'voting_not_active',
                 msg: 'Voting is not currently active. Enable voting in the election status panel first.'
