@@ -24,6 +24,7 @@ router.get('/', auth, adminOnly, async (req, res) => {
                 $setOnInsert: {
                     status: 'idle',
                     className: null,
+                    semester: null,
                     studentIds: [],
                     activeSubmissions: 0,
                     batchNumber: 0,
@@ -61,7 +62,7 @@ router.get('/', auth, adminOnly, async (req, res) => {
         if (batch.studentIds && batch.studentIds.length > 0) {
             const users = await User.find(
                 { studentId: { $in: batch.studentIds } },
-                { _id: 0, studentId: 1, name: 1, hasVoted: 1, class: 1, voterId: 1 }
+                { _id: 0, studentId: 1, name: 1, hasVoted: 1, class: 1, semester: 1, voterId: 1 }
             ).lean();
 
             // Preserve order from studentIds
@@ -72,8 +73,8 @@ router.get('/', auth, adminOnly, async (req, res) => {
             roster = batch.studentIds.map(id => {
                 const u = userMap[String(id)];
                 return u
-                    ? { studentId: String(u.studentId), voterId: u.voterId, name: u.name, class: u.class, hasVoted: u.hasVoted }
-                    : { studentId: String(id), voterId: null, name: 'Unknown', class: null, hasVoted: false };
+                    ? { studentId: String(u.studentId), voterId: u.voterId, name: u.name, class: u.class, semester: u.semester, hasVoted: u.hasVoted }
+                    : { studentId: String(id), voterId: null, name: 'Unknown', class: null, semester: null, hasVoted: false };
             });
         }
 
@@ -111,11 +112,12 @@ router.get('/status', auth, async (req, res) => {
             ? {
                 status: batch.status,
                 className: batch.className,
+                semester: batch.semester,
                 batchNumber: batch.batchNumber,
                 openedAt: batch.openedAt,
                 cooldownUntil: batch.cooldownUntil
               }
-            : { status: 'idle', className: null, batchNumber: 0, openedAt: null, cooldownUntil: null };
+            : { status: 'idle', className: null, semester: null, batchNumber: 0, openedAt: null, cooldownUntil: null };
 
         if (!batch || batch.status !== 'open') {
             return res.json({
@@ -148,7 +150,7 @@ router.get('/status', auth, async (req, res) => {
 // ─── POST / — Admin: open a new batch ────────────────────────────────────────
 router.post('/', auth, adminOnly, async (req, res) => {
     try {
-        const { className, studentIds } = req.body;
+        const { className, semester, studentIds } = req.body;
 
         // (a) Validate voting is active and schedule is not over
         const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' }).lean();
@@ -194,6 +196,16 @@ router.post('/', auth, adminOnly, async (req, res) => {
             });
         }
 
+        if (typeof semester !== 'string') {
+            return res.status(400).json({
+                error: 'invalid_semester',
+                msg: 'semester is required and must be a string. Use an empty string for students without a semester.'
+            });
+        }
+
+        const normalizedClassName = className.trim();
+        const normalizedSemester = semester.trim();
+
         // (d) All studentIds must exist
         const users = await User.find({ studentId: { $in: studentIds } }).lean();
         const foundIds = users.map(u => u.studentId);
@@ -206,13 +218,16 @@ router.post('/', auth, adminOnly, async (req, res) => {
             });
         }
 
-        // (e) All students must belong to className
-        const mismatched = users.filter(u => u.class !== className);
+        // (e) All students must belong to this exact class-and-semester cohort
+        const mismatched = users.filter(u =>
+            (u.class || '').trim() !== normalizedClassName ||
+            (u.semester || '').trim() !== normalizedSemester
+        );
         if (mismatched.length > 0) {
             return res.status(400).json({
-                error: 'class_mismatch',
-                msg: `Some students do not belong to class "${className}".`,
-                mismatched: mismatched.map(u => ({ studentId: u.studentId, name: u.name, class: u.class }))
+                error: 'cohort_mismatch',
+                msg: `Some students do not belong to ${normalizedClassName} — ${normalizedSemester || 'Semester not set'}.`,
+                mismatched: mismatched.map(u => ({ studentId: u.studentId, name: u.name, class: u.class, semester: u.semester }))
             });
         }
 
@@ -236,7 +251,8 @@ router.post('/', auth, adminOnly, async (req, res) => {
             {
                 $set: {
                     status: 'open',
-                    className: className.trim(),
+                    className: normalizedClassName,
+                    semester: normalizedSemester,
                     studentIds,
                     activeSubmissions: 0,
                     batchNumber: newBatchNumber,

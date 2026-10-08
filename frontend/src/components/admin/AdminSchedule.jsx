@@ -33,7 +33,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
     const [batchData, setBatchData] = useState(null);   // { batch, roster, remainingCount }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [selectedClass, setSelectedClass] = useState('');
+    const [selectedCohortKey, setSelectedCohortKey] = useState('');
     const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
     const [submitting, setSubmitting] = useState(false);
     const [cooldownSecs, setCooldownSecs] = useState(0);
@@ -42,11 +42,29 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
     const openTimerRef = useRef(null);
     const refreshRef = useRef(null);
 
-    // Derive unique sorted classes from students prop
-    const availableClasses = useMemo(() => {
-        const classSet = new Set(students.map(s => (s.class || '').trim()).filter(Boolean));
-        return [...classSet].sort((a, b) => a.localeCompare(b));
+    // Keep each class and semester together as one selectable voting cohort.
+    const availableCohorts = useMemo(() => {
+        const cohortMap = new Map();
+        students.forEach(student => {
+            const className = (student.class || '').trim();
+            if (!className) return;
+            const semester = (student.semester || '').trim();
+            const key = JSON.stringify([className, semester]);
+            if (!cohortMap.has(key)) cohortMap.set(key, { key, className, semester });
+        });
+        return [...cohortMap.values()].sort((a, b) =>
+            a.className.localeCompare(b.className) ||
+            a.semester.localeCompare(b.semester, undefined, { numeric: true, sensitivity: 'base' })
+        );
     }, [students]);
+    const selectedCohort = availableCohorts.find(cohort => cohort.key === selectedCohortKey);
+    const cohortStudents = useMemo(() => {
+        if (!selectedCohort) return [];
+        return students.filter(student =>
+            (student.class || '').trim() === selectedCohort.className &&
+            (student.semester || '').trim() === selectedCohort.semester
+        );
+    }, [students, selectedCohort]);
 
     // Fetch batch from backend
     const fetchBatch = useCallback(async () => {
@@ -112,22 +130,26 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         return () => clearInterval(timerRef.current);
     }, [batchData?.batch?.status, batchData?.batch?.cooldownUntil, fetchBatch]);
 
-    // When class changes in IDLE view: pre-populate selectedStudentIds
-    const handleClassChange = (cls) => {
-        setSelectedClass(cls);
-        if (cls) {
-            const unvoted = students.filter(s => (s.class || '').trim() === cls && !s.hasVoted);
+    // When the selected cohort changes, pre-populate its unvoted students.
+    const handleCohortChange = (key) => {
+        setSelectedCohortKey(key);
+        const cohort = availableCohorts.find(item => item.key === key);
+        if (cohort) {
+            const unvoted = students.filter(student =>
+                (student.class || '').trim() === cohort.className &&
+                (student.semester || '').trim() === cohort.semester &&
+                !student.hasVoted
+            );
             setSelectedStudentIds(new Set(unvoted.map(s => s.studentId)));
         } else {
             setSelectedStudentIds(new Set());
         }
     };
 
-    // Unvoted students for the selected class
+    // Unvoted students for the selected class-and-semester cohort
     const unvotedStudents = useMemo(() => {
-        if (!selectedClass) return [];
-        return students.filter(s => (s.class || '').trim() === selectedClass && !s.hasVoted);
-    }, [students, selectedClass]);
+        return cohortStudents.filter(student => !student.hasVoted);
+    }, [cohortStudents]);
 
     const allSelected = unvotedStudents.length > 0 && unvotedStudents.every(s => selectedStudentIds.has(s.studentId));
 
@@ -135,7 +157,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         if (allSelected) {
             setSelectedStudentIds(new Set());
         } else {
-            setSelectedStudentIds(new Set(unvotedStudents.map(s => s.studentId)));
+            setSelectedStudentIds(new Set(unvotedStudents.map(student => student.studentId)));
         }
     };
 
@@ -149,12 +171,13 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
 
     // Open batch
     const handleOpenBatch = async () => {
-        if (!selectedClass || selectedStudentIds.size === 0) return;
+        if (!selectedCohort || selectedStudentIds.size === 0) return;
         setSubmitting(true);
         setError('');
         try {
             await api.post('/voting-batch', {
-                className: selectedClass,
+                className: selectedCohort.className,
+                semester: selectedCohort.semester,
                 studentIds: [...selectedStudentIds]
             });
             await fetchBatch();
@@ -206,7 +229,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
             <Card>
                 <div className="flex items-center gap-2 mb-1">
                     <Users size={20} className="text-indigo-400" />
-                    <h3 className="text-lg font-bold text-white">Class Voting Batch</h3>
+                    <h3 className="text-lg font-bold text-white">Semester-wise Class Voting Batch</h3>
                 </div>
                 <div className="flex items-center gap-2 text-gray-400 text-sm mt-4">
                     <RefreshCw size={15} className="animate-spin" />
@@ -222,7 +245,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
             <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                     <Users size={20} className="text-indigo-400" />
-                    <h3 className="text-lg font-bold text-white">Class Voting Batch</h3>
+                    <h3 className="text-lg font-bold text-white">Semester-wise Class Voting Batch</h3>
                 </div>
                 <button
                     type="button"
@@ -234,7 +257,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                 </button>
             </div>
             <p className="text-sm text-gray-400 mb-5">
-                Up to 100 ballot submissions are processed simultaneously.
+                Open one class and semester at a time. Up to 100 ballot submissions are processed simultaneously.
             </p>
 
             {/* Error */}
@@ -248,24 +271,28 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
             {/* ── IDLE view ── */}
             {batchStatus === 'idle' && (
                 <div className="space-y-4">
-                    {/* Class dropdown */}
+                    {/* Class and semester cohort dropdown */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Class</label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Class &amp; Semester</label>
                         <div className="relative">
                             <select
-                                value={selectedClass}
-                                onChange={(e) => handleClassChange(e.target.value)}
+                                value={selectedCohortKey}
+                                onChange={(e) => handleCohortChange(e.target.value)}
                                 className="w-full glass-input px-4 py-3 rounded-xl text-white appearance-none pr-10 bg-[#1e293b] border border-white/10 focus:border-indigo-500 focus:outline-none cursor-pointer"
                             >
-                                <option value="" className="bg-[#1e293b]">Select class</option>
-                                {availableClasses.length === 0 && (
+                                <option value="" className="bg-[#1e293b]">Select class and semester</option>
+                                {availableCohorts.length === 0 && (
                                     <option disabled className="bg-[#1e293b] text-gray-500">No classes found</option>
                                 )}
-                                {availableClasses.map(cls => {
-                                    const cnt = students.filter(s => (s.class || '').trim() === cls && !s.hasVoted).length;
+                                {availableCohorts.map(cohort => {
+                                    const cnt = students.filter(student =>
+                                        (student.class || '').trim() === cohort.className &&
+                                        (student.semester || '').trim() === cohort.semester &&
+                                        !student.hasVoted
+                                    ).length;
                                     return (
-                                        <option key={cls} value={cls} className="bg-[#1e293b]">
-                                            {cls} ({cnt} unvoted)
+                                        <option key={cohort.key} value={cohort.key} className="bg-[#1e293b]">
+                                            {cohort.className} — {cohort.semester || 'Semester not set'} ({cnt} unvoted)
                                         </option>
                                     );
                                 })}
@@ -277,7 +304,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                     </div>
 
                     {/* Student checkbox list */}
-                    {selectedClass && (
+                    {selectedCohort && (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-300">Students ({unvotedStudents.length} unvoted)</span>
@@ -291,7 +318,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                             </div>
                             {unvotedStudents.length === 0 ? (
                                 <p className="text-sm text-gray-500 p-3 rounded-xl bg-white/5 border border-white/5 text-center">
-                                    All students in this class have already voted.
+                                    All students in this class and semester have already voted.
                                 </p>
                             ) : (
                                 <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
@@ -320,14 +347,14 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                     <button
                         type="button"
                         onClick={handleOpenBatch}
-                        disabled={!selectedClass || selectedStudentIds.size === 0 || submitting || !votingSchedule.isActive}
+                        disabled={!selectedCohort || selectedStudentIds.size === 0 || submitting || !votingSchedule.isActive}
                         className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 border ${
-                            selectedClass && selectedStudentIds.size > 0 && !submitting && votingSchedule.isActive
+                            selectedCohort && selectedStudentIds.size > 0 && !submitting && votingSchedule.isActive
                                 ? 'bg-[#1e293b] border-indigo-500/50 text-indigo-300 hover:bg-indigo-600/20 hover:border-indigo-400 cursor-pointer'
                                 : 'bg-[#1e293b]/50 border-white/5 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <Play size={15} className={selectedClass && selectedStudentIds.size > 0 && votingSchedule.isActive ? 'text-indigo-400' : 'text-gray-600'} />
+                        <Play size={15} className={selectedCohort && selectedStudentIds.size > 0 && votingSchedule.isActive ? 'text-indigo-400' : 'text-gray-600'} />
                         {submitting ? 'Opening…' : `Open Batch (${selectedStudentIds.size} students)`}
                     </button>
 
@@ -335,8 +362,8 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                     <p className="text-xs text-gray-500 text-center">
                         {!votingSchedule.isActive
                             ? 'Start voting in the election status panel before opening a batch.'
-                            : !selectedClass
-                            ? 'Select a class above to open a batch session.'
+                            : !selectedCohort
+                            ? 'Select a class and semester above to open a batch session.'
                             : selectedStudentIds.size === 0
                             ? 'Select at least one student to open a batch.'
                             : 'Ready — click Open Batch to begin.'}
@@ -351,7 +378,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                     <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30">
                         <div className="flex items-center gap-2 text-green-300 font-medium text-sm mb-2">
                             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                            Batch Open — <strong className="ml-1">{batch.className}</strong>
+                            Batch Open — <strong className="ml-1">{batch.className} — {batch.semester || 'Semester not set'}</strong>
                             <span className="text-green-400/70 font-normal ml-1">Batch #{batch.batchNumber}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs text-gray-400">
@@ -430,7 +457,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                             />
                         </div>
                         <p className="text-xs text-amber-400/70">
-                            Seat the next class during this cooldown. Voting opens again in {fmtCountdown(cooldownSecs)}.
+                            Seat the next class and semester cohort during this cooldown. Voting opens again in {fmtCountdown(cooldownSecs)}.
                         </p>
                     </div>
 

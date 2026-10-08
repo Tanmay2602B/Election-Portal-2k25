@@ -8,6 +8,7 @@ const votingBatchSchema = new mongoose.Schema({
         default: 'idle'
     },
     className: { type: String, default: null },
+    semester: { type: String, default: null },
     studentIds: { type: [String], default: [] },
     activeSubmissions: { type: Number, default: 0 },
     batchNumber: { type: Number, default: 0 },
