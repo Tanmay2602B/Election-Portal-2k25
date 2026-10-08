@@ -27,6 +27,29 @@ app.use(helmetMiddleware);
 // ─── Trust proxy (needed for accurate IP detection on Render / Vercel) ────────
 app.set('trust proxy', 1);
 
+// ─── Health check endpoints (exempt from rate limits) ────────────────────────
+app.get(['/health', '/api/health', '/ping'], (req, res) => {
+    const uptimeSecs = Math.floor(process.uptime());
+    const hours = Math.floor(uptimeSecs / 3600);
+    const minutes = Math.floor((uptimeSecs % 3600) / 60);
+    const seconds = uptimeSecs % 60;
+    const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'connecting/disconnected';
+
+    console.log(
+        `[Health Check] 🟢 Heartbeat received at ${new Date().toLocaleTimeString()} | IP: ${req.ip || 'unknown'} | Uptime: ${uptimeStr} | DB: ${dbStatus}`
+    );
+
+    res.status(200).json({
+        status: 'ok',
+        uptime: uptimeStr,
+        uptimeSeconds: uptimeSecs,
+        timestamp: new Date().toISOString(),
+        database: dbStatus,
+        message: 'Render backend is active and healthy'
+    });
+});
+
 // ─── Global DDoS / flood rate limiter — 200 req / 15 min per IP ──────────────
 app.use(globalLimiter);
 
@@ -101,4 +124,36 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+
+    // ─── Auto keep-alive pinger (prevents Render free-tier from idling) ──────
+    const backendUrl =
+        process.env.RENDER_EXTERNAL_URL ||
+        process.env.KEEP_ALIVE_URL ||
+        'https://council-selections-portal.onrender.com';
+    const intervalMinutes = parseInt(process.env.KEEP_ALIVE_INTERVAL_MINUTES || '10', 10);
+    const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+    const shouldAutoPing = process.env.AUTO_KEEP_ALIVE === 'true' || isProduction;
+
+    if (shouldAutoPing && backendUrl) {
+        console.log(`[Keep-Alive] 🛡️  Internal keep-alive service initialized.`);
+        console.log(`[Keep-Alive] Pinging ${backendUrl}/health every ${intervalMinutes} min to prevent Render spindown.`);
+
+        setInterval(async () => {
+            const pingUrl = `${backendUrl.replace(/\/+$/, '')}/health`;
+            const startTime = Date.now();
+            try {
+                const response = await fetch(pingUrl, {
+                    headers: { 'User-Agent': 'Render-Internal-KeepAlive/1.0' }
+                });
+                const duration = Date.now() - startTime;
+                if (response.ok) {
+                    console.log(`[Keep-Alive] 🟢 Self-ping successful (Status: ${response.status}, ${duration}ms) at ${new Date().toLocaleTimeString()}`);
+                } else {
+                    console.warn(`[Keep-Alive] ⚠️ Self-ping returned HTTP ${response.status} (${duration}ms)`);
+                }
+            } catch (err) {
+                console.error(`[Keep-Alive] ❌ Self-ping failed: ${err.message}`);
+            }
+        }, intervalMinutes * 60 * 1000);
+    }
 });

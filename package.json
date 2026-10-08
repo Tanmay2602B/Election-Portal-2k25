@@ -3,7 +3,8 @@
     "private": true,
     "scripts": {
         "build": "npm --prefix frontend install && npm --prefix frontend run build",
-        "dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\""
+        "dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+        "keep-alive": "npm --prefix backend run keep-alive"
     },
     "devDependencies": {
         "concurrently": "^9.2.0"
