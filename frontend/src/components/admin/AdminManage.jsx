@@ -51,12 +51,11 @@ const AdminManage = ({
 
     // Filter students
     const filteredStudents = students.filter(student => {
+        const term = searchTerm.toLowerCase();
         const matchesSearch =
-            student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            student.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            student.class.toLowerCase().includes(searchTerm.toLowerCase());
-
-        // Simple mock filter for now, can be expanded
+            (student.name || '').toLowerCase().includes(term) ||
+            (student.studentId || '').toLowerCase().includes(term) ||
+            (student.class || '').toLowerCase().includes(term);
         return matchesSearch;
     });
 
