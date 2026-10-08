@@ -19,10 +19,14 @@ const StudentWelcome = ({ userProfile, stats, votingCredits, usedCredits }) => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                     <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                         <span className="text-sm font-medium text-gray-400 block mb-1">Student ID</span>
                         <p className="text-lg font-bold text-white font-mono">{userProfile?.studentId || 'N/A'}</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                        <span className="text-sm font-medium text-gray-400 block mb-1">Voter ID</span>
+                        <p className="text-lg font-bold text-indigo-300 font-mono">{userProfile?.voterId || 'N/A'}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                         <span className="text-sm font-medium text-gray-400 block mb-1">Class</span>

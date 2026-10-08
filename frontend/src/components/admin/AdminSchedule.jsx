@@ -37,7 +37,9 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
     const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
     const [submitting, setSubmitting] = useState(false);
     const [cooldownSecs, setCooldownSecs] = useState(0);
+    const [openBatchSecs, setOpenBatchSecs] = useState(0);
     const timerRef = useRef(null);
+    const openTimerRef = useRef(null);
     const refreshRef = useRef(null);
 
     // Derive unique sorted classes from students prop
@@ -72,6 +74,25 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         }
         return () => clearInterval(refreshRef.current);
     }, [batchData?.batch?.status, fetchBatch]);
+
+    // 10-minute open batch countdown timer
+    useEffect(() => {
+        clearInterval(openTimerRef.current);
+        if (batchData?.batch?.status !== 'open' || !batchData?.batch?.openedAt) return;
+
+        const tick = () => {
+            const BATCH_DURATION_MS = 10 * 60 * 1000;
+            const remaining = Math.max(0, Math.ceil((new Date(batchData.batch.openedAt).getTime() + BATCH_DURATION_MS - Date.now()) / 1000));
+            setOpenBatchSecs(remaining);
+            if (remaining === 0) {
+                clearInterval(openTimerRef.current);
+                fetchBatch();
+            }
+        };
+        tick();
+        openTimerRef.current = setInterval(tick, 1000);
+        return () => clearInterval(openTimerRef.current);
+    }, [batchData?.batch?.status, batchData?.batch?.openedAt, fetchBatch]);
 
     // Cooldown countdown: tick from cooldownUntil
     useEffect(() => {
@@ -172,7 +193,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
         }
     };
 
-    const COOLDOWN_TOTAL = 120;
+    const COOLDOWN_TOTAL = 30;
     const cooldownProgress = COOLDOWN_TOTAL > 0 ? Math.round((cooldownSecs / COOLDOWN_TOTAL) * 100) : 0;
 
     const batchStatus = batchData?.batch?.status ?? 'idle';
@@ -335,6 +356,10 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                         </div>
                         <div className="flex items-center justify-between text-xs text-gray-400">
                             <span>Opened: {batch.openedAt ? new Date(batch.openedAt).toLocaleTimeString() : '—'}</span>
+                            <span className="font-mono text-emerald-300 font-bold bg-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                <Clock size={12} className="text-emerald-400" />
+                                {openBatchSecs > 0 ? `${fmtCountdown(openBatchSecs)} remaining` : 'Time expired'}
+                            </span>
                             <span className="text-green-300 font-semibold">{remainingCount} remaining</span>
                         </div>
                     </div>
@@ -346,6 +371,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                                 <tr className="text-left text-gray-500 text-xs border-b border-white/10">
                                     <th className="pb-2 pr-4 font-medium">Name</th>
                                     <th className="pb-2 pr-4 font-medium">Student ID</th>
+                                    <th className="pb-2 pr-4 font-medium">Voter ID</th>
                                     <th className="pb-2 font-medium">Status</th>
                                 </tr>
                             </thead>
@@ -354,6 +380,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                                     <tr key={r.studentId || i} className="text-gray-300">
                                         <td className="py-2 pr-4 font-medium text-white">{r.name}</td>
                                         <td className="py-2 pr-4 font-mono text-sm text-indigo-300 font-semibold">{r.studentId}</td>
+                                        <td className="py-2 pr-4 text-xs font-mono text-indigo-200">{r.voterId || '-'}</td>
                                         <td className="py-2">
                                             {r.hasVoted
                                                 ? <span className="text-green-400 text-xs font-medium">✅ Voted</span>
@@ -364,7 +391,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                                 ))}
                                 {roster.length === 0 && (
                                     <tr>
-                                        <td colSpan={3} className="py-4 text-center text-gray-500 text-xs">No roster data</td>
+                                        <td colSpan={4} className="py-4 text-center text-gray-500 text-xs">No roster data</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -381,7 +408,7 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                         {submitting ? 'Closing…' : 'Close Batch'}
                     </button>
-                    <p className="text-xs text-gray-500 text-center">Closing starts a 2-minute cooldown before the next batch can open.</p>
+                    <p className="text-xs text-gray-500 text-center">Closing starts a 30-second cooldown before the next batch can open.</p>
                 </div>
             )}
 

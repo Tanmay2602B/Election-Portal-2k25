@@ -168,6 +168,16 @@ router.post(
                 return res.status(429).json({ error: 'batch_not_open' });
             }
 
+            // 2.2 Batch 10-min duration check
+            const BATCH_DURATION_MS = 10 * 60 * 1000;
+            if (batch.openedAt && (Date.now() - new Date(batch.openedAt).getTime()) >= BATCH_DURATION_MS) {
+                await VotingBatch.findOneAndUpdate(
+                    { _id: 'current', status: 'open', batchNumber: batch.batchNumber },
+                    { $set: { status: 'cooldown', cooldownUntil: new Date(Date.now() + 30_000), lastUpdatedAt: new Date() } }
+                );
+                return res.status(429).json({ error: 'batch_expired', msg: 'Batch voting time (10 minutes) has expired.' });
+            }
+
             // 2.5 Schedule must not be over
             const scheduleSetting = await Setting.findOne({ key: 'votingSchedule' }).lean();
             if (scheduleSetting?.value?.votingEnd) {
@@ -177,7 +187,8 @@ router.post(
             }
 
             // 3. Student must be listed in this batch
-            if (!batch.studentIds.includes(userId)) {
+            const studentId = req.user.studentId || userId;
+            if (!batch.studentIds.includes(studentId)) {
                 return res.status(403).json({ error: 'not_in_batch' });
             }
 
@@ -192,7 +203,9 @@ router.post(
             }
             // ── End VotingBatch guard ─────────────────────────────────────────
 
-            const user = await User.findOne({ studentId: userId });
+            const user = await User.findOne({
+                $or: [{ studentId }, { _id: req.user._id || userId }]
+            });
             if (!user) return res.status(404).json({ msg: 'Student not found' });
             if (user.hasVoted) {
                 // Release the slot we just claimed
@@ -244,7 +257,7 @@ router.post(
                     {
                         $set: {
                             status: 'cooldown',
-                            cooldownUntil: new Date(Date.now() + 120_000),
+                            cooldownUntil: new Date(Date.now() + 30_000),
                             lastUpdatedAt: new Date()
                         }
                     }

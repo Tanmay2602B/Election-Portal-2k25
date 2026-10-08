@@ -16,6 +16,8 @@ import {
     authLimiter,
     adminLimiter
 } from './middleware/protection.js';
+import { attachMongoCommandLogging } from './lib/mongoCommandLogging.js';
+import { ensureVoterIds } from './lib/studentIdentity.js';
 
 dotenv.config();
 
@@ -94,8 +96,13 @@ app.use(express.json());
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB'))
+mongoose.connect(MONGODB_URI, { monitorCommands: true })
+    .then(async () => {
+        console.log('Connected to MongoDB');
+        attachMongoCommandLogging(mongoose.connection.getClient());
+        // Ensure all existing students have Voter IDs (idempotent migration)
+        await ensureVoterIds().catch(err => console.error('[VoterID] Migration warning:', err.message));
+    })
     .catch((err) => console.error('MongoDB connection error:', err));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

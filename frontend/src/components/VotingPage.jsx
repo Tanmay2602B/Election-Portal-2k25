@@ -23,6 +23,7 @@ function VotingPage() {
   const [redirectCountdown, setRedirectCountdown] = useState(8);
   const [batchBlocked, setBatchBlocked] = useState(null); // { allowedClasses, yourClass }
   const [batchStatus, setBatchStatus] = useState(null); // null = not yet checked, { allowed, reason, batch } when loaded
+  const [clockNow, setClockNow] = useState(Date.now());
 
   // Guard: if the user has already voted, log them out immediately.
   useEffect(() => {
@@ -46,6 +47,16 @@ function VotingPage() {
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voteSubmitted, redirectCountdown]);
+
+  useEffect(() => {
+    if (!batchStatus || batchStatus.batch?.status !== 'open') return undefined;
+    const intervalId = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(intervalId);
+  }, [batchStatus]);
+
+  const batchRemainingSeconds = (batchStatus?.batch?.status === 'open' && batchStatus?.batch?.openedAt)
+      ? Math.max(0, Math.ceil((new Date(batchStatus.batch.openedAt).getTime() + 10 * 60 * 1000 - clockNow) / 1000))
+      : 0;
 
   useEffect(() => {
     loadElectionData();
@@ -278,16 +289,26 @@ function VotingPage() {
               <p className="text-gray-400">Select one candidate for each position below</p>
             </div>
           </div>
-          {/* Progress Bar */}
-          <div className="glass-panel px-4 py-2 rounded-xl flex items-center gap-4">
-            <span className="text-sm text-gray-300 whitespace-nowrap">Progress</span>
-            <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 transition-all duration-500"
-                style={{ width: `${(Object.keys(votes).length / totalPositions) * 100}%` }}
-              />
+          {/* Progress Bar & Batch Timer */}
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            {batchRemainingSeconds > 0 && (
+              <div className="glass-panel px-4 py-2 rounded-xl flex items-center gap-2 border border-emerald-500/20 bg-emerald-500/10">
+                <Clock className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-mono font-bold text-emerald-300">
+                  {Math.floor(batchRemainingSeconds / 60)}:{String(batchRemainingSeconds % 60).padStart(2, '0')}
+                </span>
+              </div>
+            )}
+            <div className="glass-panel px-4 py-2 rounded-xl flex items-center gap-4">
+              <span className="text-sm text-gray-300 whitespace-nowrap">Progress</span>
+              <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-500"
+                  style={{ width: `${(Object.keys(votes).length / totalPositions) * 100}%` }}
+                />
+              </div>
+              <span className="text-sm font-bold text-white">{Object.keys(votes).length}/{positions.length}</span>
             </div>
-            <span className="text-sm font-bold text-white">{Object.keys(votes).length}/{positions.length}</span>
           </div>
         </div>
 

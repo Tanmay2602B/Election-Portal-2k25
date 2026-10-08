@@ -4,6 +4,7 @@ import {
     X, Upload, CheckCircle, AlertTriangle, AlertCircle,
     Eye, EyeOff, Users, FileSpreadsheet, ChevronDown, ChevronUp
 } from 'lucide-react';
+import { generateVoterId } from '../../utils/studentName.js';
 
 // ── helpers (mirrored from AdminDashboard) ────────────────────────────────────
 const normalize  = (key) => key.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -35,9 +36,12 @@ const parseSheet = (file) => new Promise((resolve, reject) => {
                 return '';
             };
 
+            const reservedVoterIds = new Set();
             const parsed = rawRows.map((row, idx) => {
                 const studentId    = getField(row, 'studentId','student_id','studentid','id','roll','rollno','rollnumber','enrollment');
                 const name         = getField(row, 'name','studentname','student_name','fullname','full_name');
+                const sheetVoterId = getField(row, 'voterId','voter_id','voterid','voter');
+                const voterId      = sheetVoterId ? sheetVoterId.toUpperCase() : generateVoterId(reservedVoterIds);
                 const sheetPwd     = getField(row, 'password','pass','passwd');
                 const password     = sheetPwd || generatePassword(name);
                 const studentClass = getField(row, 'class','studentclass','branch','department','dept') || 'Unknown';
@@ -47,7 +51,19 @@ const parseSheet = (file) => new Promise((resolve, reject) => {
                 if (!studentId) errors.push('Missing Student ID');
                 if (!name)      errors.push('Missing Name');
 
-                return { _rowIdx: idx, studentId, name, password, class: studentClass, semester, errors, selected: errors.length === 0 };
+                return {
+                    _rowIdx: idx,
+                    studentId,
+                    voterId,
+                    name,
+                    password,
+                    class: studentClass,
+                    semester,
+                    errors,
+                    selected: errors.length === 0,
+                    _autoVoterId: !sheetVoterId,
+                    _autoPassword: !sheetPwd
+                };
             });
 
             resolve(parsed);
@@ -253,6 +269,7 @@ const ImportPreviewModal = ({ isOpen, onClose, onConfirm, existingStudentIds = [
                                         </th>
                                         {[
                                             { key: 'studentId', label: 'Student ID' },
+                                            { key: 'voterId',   label: 'Voter ID' },
                                             { key: 'name',      label: 'Name' },
                                             { key: 'class',     label: 'Class' },
                                             { key: 'semester',  label: 'Semester' },
@@ -305,6 +322,7 @@ const ImportPreviewModal = ({ isOpen, onClose, onConfirm, existingStudentIds = [
                                                     />
                                                 </td>
                                                 <td className="p-3 font-mono text-xs font-medium text-white/80">{row.studentId || <span className="text-red-400 italic">missing</span>}</td>
+                                                <td className="p-3 font-mono text-xs font-semibold text-indigo-300">{row.voterId}</td>
                                                 <td className="p-3 font-medium">{row.name || <span className="text-red-400 italic">missing</span>}</td>
                                                 <td className="p-3">{row.class}</td>
                                                 <td className="p-3">{row.semester}</td>
@@ -336,7 +354,7 @@ const ImportPreviewModal = ({ isOpen, onClose, onConfirm, existingStudentIds = [
                                     })}
                                     {displayRows.length === 0 && (
                                         <tr>
-                                            <td colSpan={7} className="p-8 text-center text-gray-500">No rows match your search.</td>
+                                            <td colSpan={8} className="p-8 text-center text-gray-500">No rows match your search.</td>
                                         </tr>
                                     )}
                                 </tbody>

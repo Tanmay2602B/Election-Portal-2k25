@@ -14,7 +14,7 @@ const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
         <div className="glass-panel w-64 h-screen fixed left-0 top-0 flex flex-col border-r border-white/10 z-20">
             <div className="p-6">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-                    Admin Portal
+                    FOST Admin Portal
                 </h1>
                 <p className="text-gray-400 text-xs mt-1">Election Management System</p>
             </div>

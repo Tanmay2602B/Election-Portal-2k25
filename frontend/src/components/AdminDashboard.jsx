@@ -57,8 +57,8 @@ const AdminDashboard = () => {
   const addToCredCache = (entries) => {
     setCredentialsCache(prev => {
       const next = { ...prev };
-      entries.forEach(({ studentId, name, password }) => {
-        next[studentId] = { name, password };
+      entries.forEach(({ studentId, voterId, name, password }) => {
+        next[studentId] = { voterId, name, password };
       });
       try { sessionStorage.setItem('electionCredCache', JSON.stringify(next)); } catch {}
       return next;
@@ -336,6 +336,7 @@ const AdminDashboard = () => {
       const res = await api.post('/users/bulk', {
         students: parsedRows.map(r => ({
           studentId: r.studentId,
+          voterId: r.voterId,
           name: r.name,
           password: r.password,
           class: r.class || 'Unknown',
@@ -350,7 +351,15 @@ const AdminDashboard = () => {
       // Cache plaintext passwords for the successfully imported rows
       const importedCredentials = parsedRows
         .filter(r => rowResults.find(rr => rr.studentId === r.studentId && rr.status === 'imported'))
-        .map(r => ({ studentId: r.studentId, name: r.name, password: r.password }));
+        .map(r => {
+          const match = rowResults.find(rr => rr.studentId === r.studentId);
+          return {
+            studentId: r.studentId,
+            voterId: match?.voterId || r.voterId,
+            name: r.name,
+            password: r.password
+          };
+        });
 
       if (importedCredentials.length > 0) {
         addToCredCache(importedCredentials);
@@ -370,10 +379,11 @@ const AdminDashboard = () => {
           const wb = XLSX.utils.book_new();
           const ws = XLSX.utils.json_to_sheet(importedCredentials.map(c => ({
             'Student ID': c.studentId,
+            'Voter ID': c.voterId || '',
             'Name': c.name,
             'Password': c.password
           })));
-          ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 14 }];
+          ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 14 }];
           XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
           XLSX.writeFile(wb, 'imported_student_credentials.xlsx');
         }
@@ -409,6 +419,7 @@ const AdminDashboard = () => {
       const cached = credentialsCache[s.studentId];
       return {
         'Student ID': s.studentId,
+        'Voter ID': s.voterId || cached?.voterId || '',
         'Name': s.name,
         'Class': s.class || '',
         'Semester': s.semester || '',
@@ -416,7 +427,7 @@ const AdminDashboard = () => {
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Note: 'No students found' }]);
-    ws['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 36 }];
+    ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
     XLSX.writeFile(wb, 'student_credentials.xlsx');
   };

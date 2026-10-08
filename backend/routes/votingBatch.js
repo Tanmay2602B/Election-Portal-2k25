@@ -35,12 +35,33 @@ router.get('/', auth, adminOnly, async (req, res) => {
             { upsert: true, new: true }
         );
 
+        // Auto-check 10-minute batch duration (600,000 ms) and 30-second cooldown (30,000 ms)
+        const BATCH_DURATION_MS = 10 * 60 * 1000;
+        const now = Date.now();
+        if (batch.status === 'open' && batch.openedAt && (now - new Date(batch.openedAt).getTime()) >= BATCH_DURATION_MS && (batch.activeSubmissions || 0) === 0) {
+            batch.status = 'cooldown';
+            batch.cooldownUntil = new Date(now + 30_000);
+            batch.lastUpdatedAt = new Date();
+            await VotingBatch.updateOne(
+                { _id: 'current', batchNumber: batch.batchNumber },
+                { $set: { status: 'cooldown', cooldownUntil: batch.cooldownUntil, lastUpdatedAt: batch.lastUpdatedAt } }
+            );
+        } else if (batch.status === 'cooldown' && batch.cooldownUntil && now >= new Date(batch.cooldownUntil).getTime()) {
+            batch.status = 'idle';
+            batch.cooldownUntil = null;
+            batch.lastUpdatedAt = new Date();
+            await VotingBatch.updateOne(
+                { _id: 'current', batchNumber: batch.batchNumber },
+                { $set: { status: 'idle', cooldownUntil: null, lastUpdatedAt: batch.lastUpdatedAt } }
+            );
+        }
+
         // Build roster from studentIds
         let roster = [];
         if (batch.studentIds && batch.studentIds.length > 0) {
             const users = await User.find(
                 { studentId: { $in: batch.studentIds } },
-                { _id: 0, studentId: 1, name: 1, hasVoted: 1, class: 1 }
+                { _id: 0, studentId: 1, name: 1, hasVoted: 1, class: 1, voterId: 1 }
             ).lean();
 
             // Preserve order from studentIds
@@ -51,8 +72,8 @@ router.get('/', auth, adminOnly, async (req, res) => {
             roster = batch.studentIds.map(id => {
                 const u = userMap[String(id)];
                 return u
-                    ? { studentId: String(u.studentId), name: u.name, class: u.class, hasVoted: u.hasVoted }
-                    : { studentId: String(id), name: 'Unknown', class: null, hasVoted: false };
+                    ? { studentId: String(u.studentId), voterId: u.voterId, name: u.name, class: u.class, hasVoted: u.hasVoted }
+                    : { studentId: String(id), voterId: null, name: 'Unknown', class: null, hasVoted: false };
             });
         }
 
@@ -68,30 +89,55 @@ router.get('/', auth, adminOnly, async (req, res) => {
 // ─── GET /status — Any authenticated user: check if this student can vote ─────
 router.get('/status', auth, async (req, res) => {
     try {
-        const batch = await VotingBatch.findById('current').lean();
+        let batch = await VotingBatch.findById('current').lean();
+        const BATCH_DURATION_MS = 10 * 60 * 1000;
+        const now = Date.now();
+
+        if (batch && batch.status === 'open' && batch.openedAt && (now - new Date(batch.openedAt).getTime()) >= BATCH_DURATION_MS && (batch.activeSubmissions || 0) === 0) {
+            await VotingBatch.updateOne(
+                { _id: 'current', batchNumber: batch.batchNumber },
+                { $set: { status: 'cooldown', cooldownUntil: new Date(now + 30_000), lastUpdatedAt: new Date() } }
+            );
+            batch = await VotingBatch.findById('current').lean();
+        } else if (batch && batch.status === 'cooldown' && batch.cooldownUntil && now >= new Date(batch.cooldownUntil).getTime()) {
+            await VotingBatch.updateOne(
+                { _id: 'current', batchNumber: batch.batchNumber },
+                { $set: { status: 'idle', cooldownUntil: null, lastUpdatedAt: new Date() } }
+            );
+            batch = await VotingBatch.findById('current').lean();
+        }
+
+        const batchInfo = batch
+            ? {
+                status: batch.status,
+                className: batch.className,
+                batchNumber: batch.batchNumber,
+                openedAt: batch.openedAt,
+                cooldownUntil: batch.cooldownUntil
+              }
+            : { status: 'idle', className: null, batchNumber: 0, openedAt: null, cooldownUntil: null };
 
         if (!batch || batch.status !== 'open') {
             return res.json({
                 allowed: false,
                 reason: 'batch_not_open',
-                batch: batch
-                    ? { status: batch.status, className: batch.className, batchNumber: batch.batchNumber }
-                    : { status: 'idle', className: null, batchNumber: 0 }
+                batch: batchInfo
             });
         }
 
-        if (!batch.studentIds.includes(req.user.id)) {
+        const studentId = req.user.studentId || req.user.id;
+        if (!batch.studentIds.includes(studentId)) {
             return res.json({
                 allowed: false,
                 reason: 'not_in_batch',
-                batch: { status: batch.status, className: batch.className, batchNumber: batch.batchNumber }
+                batch: batchInfo
             });
         }
 
         return res.json({
             allowed: true,
             reason: null,
-            batch: { status: batch.status, className: batch.className, batchNumber: batch.batchNumber }
+            batch: batchInfo
         });
     } catch (err) {
         console.error('GET /voting-batch/status error:', err);
@@ -129,7 +175,7 @@ router.post('/', auth, adminOnly, async (req, res) => {
         if (existing && existing.status !== 'idle') {
             const reason = existing.status === 'open'
                 ? 'A batch is already open. Close it before opening a new one.'
-                : `A 2-minute cooldown is in progress. Wait until ${new Date(existing.cooldownUntil).toLocaleTimeString()} before opening the next batch.`;
+                : `A 30-second cooldown is in progress. Wait until ${new Date(existing.cooldownUntil).toLocaleTimeString()} before opening the next batch.`;
             return res.status(409).json({ error: 'batch_not_idle', msg: reason, batch: existing });
         }
 
@@ -225,7 +271,7 @@ router.post('/close', auth, adminOnly, async (req, res) => {
         }
 
         const now = new Date();
-        const cooldownUntil = new Date(now.getTime() + 120_000); // 2 minutes
+        const cooldownUntil = new Date(now.getTime() + 30_000); // 30 seconds
 
         const updatedBatch = await VotingBatch.findOneAndUpdate(
             { _id: 'current', batchNumber: batch.batchNumber },
@@ -243,7 +289,7 @@ router.post('/close', auth, adminOnly, async (req, res) => {
             return res.status(409).json({ error: 'conflict', msg: 'Batch state changed concurrently.' });
         }
 
-        res.json({ msg: 'Batch closed. 2-minute cooldown started.', batch: updatedBatch });
+        res.json({ msg: 'Batch closed. 30-second cooldown started.', batch: updatedBatch });
     } catch (err) {
         console.error('POST /voting-batch/close error:', err);
         res.status(500).json({ error: 'Server error' });

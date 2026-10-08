@@ -110,6 +110,18 @@ const AdminModal = ({
                             />
                             {editItem && <p className="text-xs text-gray-500 mt-1">ID cannot be changed</p>}
                         </div>
+                        {editItem?.voterId && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-1">Voter ID</label>
+                                <input
+                                    type="text"
+                                    className="glass-input w-full px-4 py-2 rounded-lg font-mono text-indigo-300 bg-white/5 cursor-not-allowed"
+                                    value={editItem.voterId}
+                                    readOnly
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Auto-generated login ID for student</p>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-gray-300 mb-1">Full Name</label>
                             <input

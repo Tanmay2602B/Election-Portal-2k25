@@ -7,13 +7,13 @@ import {
 
 function LoginPage() {
   const [isStudentLogin, setIsStudentLogin] = useState(true);
-  const [formData, setFormData] = useState({ studentId: '', adminId: '', password: '' });
+  const [formData, setFormData] = useState({ voterId: '', adminId: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [wakeCountdown, setWakeCountdown] = useState(null); // null = not waking up
   const wakeTimerRef = useRef(null);
-  const pendingLoginRef = useRef(null); // stores { id, password } for auto-retry
+  const pendingLoginRef = useRef(null); // stores { id, password, isStudentLogin } for auto-retry
   const { login } = useAuth();
 
   // Cleanup timer on unmount
@@ -23,10 +23,10 @@ function LoginPage() {
     };
   }, []);
 
-  const startWakeCountdown = (id, password) => {
+  const startWakeCountdown = (id, password, isStudent) => {
     const WAIT_SECONDS = 30;
     setWakeCountdown(WAIT_SECONDS);
-    pendingLoginRef.current = { id, password };
+    pendingLoginRef.current = { id, password, isStudent };
 
     wakeTimerRef.current = setInterval(() => {
       setWakeCountdown(prev => {
@@ -37,6 +37,7 @@ function LoginPage() {
           attemptLogin(
             pendingLoginRef.current.id,
             pendingLoginRef.current.password,
+            pendingLoginRef.current.isStudent,
             true // isRetry
           );
           return null;
@@ -46,13 +47,13 @@ function LoginPage() {
     }, 1000);
   };
 
-  const attemptLogin = async (id, password, isRetry = false) => {
+  const attemptLogin = async (id, password, isStudent, isRetry = false) => {
     setLoading(true);
     setError('');
     if (!isRetry) setWakeCountdown(null);
 
     try {
-      await login(id, password);
+      await login(id, password, isStudent);
     } catch (err) {
       if (!err.response) {
         // Distinguish timeout vs CORS/network block
@@ -62,7 +63,7 @@ function LoginPage() {
             setWakeCountdown(null);
             setError('Server is taking longer than expected. Please wait a moment and try signing in again.');
           } else {
-            startWakeCountdown(id, password);
+            startWakeCountdown(id, password, isStudent);
           }
         } else if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
           // Pure network failure — no internet or server is completely down
@@ -76,6 +77,9 @@ function LoginPage() {
       } else if (err.response.status === 400) {
         setWakeCountdown(null);
         setError(err.response.data?.message || 'Invalid credentials. Please check your ID and password.');
+      } else if (err.response.status === 403) {
+        setWakeCountdown(null);
+        setError(err.response.data?.message || 'You have already voted and cannot login again.');
       } else if (err.response.status === 500) {
         setWakeCountdown(null);
         setError('Server error. Please try again in a moment.');
@@ -98,11 +102,11 @@ function LoginPage() {
       setWakeCountdown(null);
     }
 
-    const id = isStudentLogin ? formData.studentId.trim() : formData.adminId.trim();
+    const id = isStudentLogin ? formData.voterId.trim() : formData.adminId.trim();
     const password = formData.password;
 
     if (!id) {
-      setError(isStudentLogin ? 'Please enter your Student ID.' : 'Please enter your Admin ID.');
+      setError(isStudentLogin ? 'Please enter your Voter ID.' : 'Please enter your Admin ID.');
       return;
     }
     if (!password) {
@@ -110,7 +114,7 @@ function LoginPage() {
       return;
     }
 
-    await attemptLogin(id, password, false);
+    await attemptLogin(id, password, isStudentLogin, false);
   };
 
   const handleChange = (e) => {
@@ -126,7 +130,7 @@ function LoginPage() {
     }
     setWakeCountdown(null);
     setIsStudentLogin(student);
-    setFormData({ studentId: '', adminId: '', password: '' });
+    setFormData({ voterId: '', adminId: '', password: '' });
     setError('');
   };
 
@@ -217,18 +221,25 @@ function LoginPage() {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-300 flex items-center pl-1">
               {isStudentLogin
-                ? <><Users className="h-4 w-4 mr-2 text-indigo-400" /> Student ID</>
+                ? <><Key className="h-4 w-4 mr-2 text-indigo-400" /> Voter ID</>
                 : <><Shield className="h-4 w-4 mr-2 text-purple-400" /> Admin ID</>
               }
             </label>
             <input
               type="text"
-              id={isStudentLogin ? 'input-student-id' : 'input-admin-id'}
-              name={isStudentLogin ? 'studentId' : 'adminId'}
-              value={isStudentLogin ? formData.studentId : formData.adminId}
-              onChange={handleChange}
-              className="glass-input w-full"
-              placeholder={isStudentLogin ? 'Enter your student ID' : 'Enter your admin ID'}
+              id={isStudentLogin ? 'input-voter-id' : 'input-admin-id'}
+              name={isStudentLogin ? 'voterId' : 'adminId'}
+              value={isStudentLogin ? formData.voterId : formData.adminId}
+              onChange={(e) => {
+                if (isStudentLogin) {
+                  setFormData({ ...formData, voterId: e.target.value.toUpperCase() });
+                  setError('');
+                } else {
+                  handleChange(e);
+                }
+              }}
+              className={`glass-input w-full ${isStudentLogin ? 'uppercase font-mono tracking-wider' : ''}`}
+              placeholder={isStudentLogin ? 'Enter 6-character Voter ID (e.g. A9B2X1)' : 'Enter your admin ID'}
               autoComplete="username"
               autoFocus
               required

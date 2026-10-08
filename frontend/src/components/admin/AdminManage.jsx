@@ -30,18 +30,19 @@ const AdminManage = ({
     // Download a blank import template
     const downloadTemplate = () => {
         const templateData = [
-            { studentId: 'S001', name: 'John Doe',    class: 'BCA-1', semester: 'Semester 1', password: '' },
-            { studentId: 'S002', name: 'Jane Smith',  class: 'BCA-2', semester: 'Semester 3', password: '' },
-            { studentId: 'S003', name: 'Raj Kumar',   class: 'MCA-1', semester: 'Semester 2', password: '' },
+            { studentId: 'S001', voterId: '', name: 'John Doe',    class: 'BCA-1', semester: 'Semester 1', password: '' },
+            { studentId: 'S002', voterId: '', name: 'Jane Smith',  class: 'BCA-2', semester: 'Semester 3', password: '' },
+            { studentId: 'S003', voterId: '', name: 'Raj Kumar',   class: 'MCA-1', semester: 'Semester 2', password: '' },
         ];
         // Note row explaining accepted column variants
         const noteSheet = [
+            { 'INFO': 'Leave the voterId column EMPTY — a unique 6-character alphanumeric Voter ID will be auto-generated (e.g. A9B2X1).' },
             { 'INFO': 'Leave the password column EMPTY — an 8-character password will be auto-generated (e.g. john1234).' },
-            { 'INFO': 'Accepted column names:  studentId / roll / rollno / enrollment / id   |   name / studentName / fullName   |   class / branch / department   |   semester / sem / year' },
+            { 'INFO': 'Accepted column names:  studentId / roll / rollno / enrollment / id   |   voterId / voter_id / voter   |   name / studentName / fullName   |   class / branch / department   |   semester / sem / year' },
         ];
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(templateData);
-        ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+        ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
         XLSX.utils.book_append_sheet(wb, ws, 'Students Template');
         const wsNote = XLSX.utils.json_to_sheet(noteSheet);
         wsNote['!cols'] = [{ wch: 100 }];
@@ -55,6 +56,7 @@ const AdminManage = ({
         const matchesSearch =
             (student.name || '').toLowerCase().includes(term) ||
             (student.studentId || '').toLowerCase().includes(term) ||
+            (student.voterId || '').toLowerCase().includes(term) ||
             (student.class || '').toLowerCase().includes(term);
         return matchesSearch;
     });
@@ -239,6 +241,7 @@ const AdminManage = ({
                             <thead>
                                 <tr className="border-b border-white/10 bg-white/5 text-gray-400 text-sm">
                                     <th className="p-4 font-medium">Student ID</th>
+                                    <th className="p-4 font-medium">Voter ID</th>
                                     <th className="p-4 font-medium">Name</th>
                                     <th className="p-4 font-medium">Class</th>
                                     <th className="p-4 font-medium">Semester</th>
@@ -250,6 +253,7 @@ const AdminManage = ({
                                 {filteredStudents.map(student => (
                                     <tr key={student.studentId} className="hover:bg-white/5 transition-colors text-gray-300">
                                         <td className="p-4 font-medium text-white">{student.studentId}</td>
+                                        <td className="p-4 font-mono font-semibold text-indigo-300 text-xs">{student.voterId || '-'}</td>
                                         <td className="p-4">{student.name}</td>
                                         <td className="p-4">{student.class}</td>
                                         <td className="p-4">{student.semester || '-'}</td>

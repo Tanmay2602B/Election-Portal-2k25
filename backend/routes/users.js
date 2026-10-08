@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 import Vote from '../models/Vote.js';
 import auth from '../middleware/auth.js';
+import { generateVoterId } from '../lib/studentIdentity.js';
 
 const router = express.Router();
 
@@ -22,10 +23,10 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
 
-    const { studentId, name, password, class: studentClass, semester } = req.body;
+    const { studentId, name, password, class: studentClass, semester, voterId: requestedVoterId } = req.body;
 
     try {
-        let user = await User.findOne({ studentId });
+        let user = await User.findOne({ studentId, role: 'student' });
         if (user) {
             return res.status(400).json({ msg: 'User already exists' });
         }
@@ -36,7 +37,10 @@ router.post('/', auth, async (req, res) => {
             password: password || 'password123',
             class: studentClass,
             semester,
-            role: 'student'
+            role: 'student',
+            // If a Voter ID was pre-generated in the import preview, use it; otherwise
+            // the pre-save hook will generate one automatically.
+            ...(requestedVoterId ? { voterId: requestedVoterId } : {}),
         });
 
         const salt = await bcrypt.genSalt(10);
@@ -53,8 +57,8 @@ router.post('/', auth, async (req, res) => {
 });
 
 // POST /api/users/bulk — Admin: import many students in ONE request
-// Body: { students: [{ studentId, name, password, class, semester }, ...] }
-// Returns: { imported, skipped, results: [{ studentId, status, reason? }] }
+// Body: { students: [{ studentId, name, password, class, semester, voterId? }, ...] }
+// Returns: { imported, skipped, results: [{ studentId, voterId, status, reason? }] }
 router.post('/bulk', auth, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ msg: 'Access denied' });
 
@@ -65,17 +69,21 @@ router.post('/bulk', auth, async (req, res) => {
 
     // Fetch all existing studentIds in one query to detect duplicates fast
     const incomingIds = students.map(s => s.studentId).filter(Boolean);
-    const existing = await User.find({ studentId: { $in: incomingIds } }).select('studentId').lean();
+    const existing = await User.find({ studentId: { $in: incomingIds }, role: 'student' }).select('studentId').lean();
     const existingSet = new Set(existing.map(u => u.studentId));
 
-    // Hash all passwords in parallel (bcrypt is CPU-bound — cap concurrency to 10)
-    // Use 8 rounds (vs 10 for single inserts) — still very secure, ~4x faster per hash
+    // Collect all existing voter IDs so we don't collide
+    const usedVoterIds = new Set(
+        (await User.find({ role: 'student', voterId: { $exists: true, $ne: null } }).select('voterId').lean())
+            .map(u => u.voterId)
+    );
+
     const HASH_ROUNDS = 8;
     const results = [];
     const toInsert = [];
 
     for (const s of students) {
-        const { studentId, name, password, class: studentClass, semester } = s;
+        const { studentId, name, password, class: studentClass, semester, voterId: requestedVoterId } = s;
         if (!studentId || !name) {
             results.push({ studentId: studentId || '(missing)', status: 'failed', reason: 'Missing studentId or name' });
             continue;
@@ -84,7 +92,19 @@ router.post('/bulk', auth, async (req, res) => {
             results.push({ studentId, status: 'failed', reason: 'User already exists' });
             continue;
         }
-        toInsert.push({ studentId, name, password: password || 'password123', class: studentClass || 'Unknown', semester: semester || 'Semester 1' });
+        // Use pre-generated voter ID from preview, or generate a fresh unique one
+        let voterId = requestedVoterId;
+        if (!voterId || usedVoterIds.has(voterId)) {
+            do { voterId = generateVoterId(); } while (usedVoterIds.has(voterId));
+        }
+        usedVoterIds.add(voterId);
+        toInsert.push({
+            studentId, name,
+            password: password || 'password123',
+            class: studentClass || 'Unknown',
+            semester: semester || 'Semester 1',
+            voterId,
+        });
     }
 
     // Hash passwords in batches of 10 to avoid blocking the event loop
@@ -94,15 +114,16 @@ router.post('/bulk', auth, async (req, res) => {
         await Promise.all(chunk.map(async (s) => {
             try {
                 const hashed = await bcrypt.hash(s.password, HASH_ROUNDS);
-                await User.create({
+                const created = await User.create({
                     studentId: s.studentId,
                     name: s.name,
                     password: hashed,
                     class: s.class,
                     semester: s.semester,
-                    role: 'student'
+                    role: 'student',
+                    voterId: s.voterId,
                 });
-                results.push({ studentId: s.studentId, status: 'imported' });
+                results.push({ studentId: s.studentId, voterId: created.voterId, status: 'imported' });
             } catch (err) {
                 const reason = err.code === 11000 ? 'User already exists (duplicate key)' : (err.message || 'Server error');
                 results.push({ studentId: s.studentId, status: 'failed', reason });

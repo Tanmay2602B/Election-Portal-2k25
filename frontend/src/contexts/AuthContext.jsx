@@ -43,8 +43,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (studentId, password) => {
-    const res = await api.post('/auth/login', { studentId, password });
+  const login = async (loginId, password, isStudentLogin = true) => {
+    const res = await api.post('/auth/login', {
+      ...(isStudentLogin ? { voterId: loginId } : { studentId: loginId }),
+      password,
+    });
     localStorage.setItem('token', res.data.token);
     setCurrentUser({ token: res.data.token });
     setUserProfile(res.data.user);
