@@ -352,8 +352,8 @@ const VotingBatchPanel = ({ votingSchedule, students }) => {
                             <tbody className="divide-y divide-white/5">
                                 {roster.map((r, i) => (
                                     <tr key={r.studentId || i} className="text-gray-300">
-                                        <td className="py-2 pr-4">{r.name}</td>
-                                        <td className="py-2 pr-4 text-xs text-gray-500">{r.studentId}</td>
+                                        <td className="py-2 pr-4 font-medium text-white">{r.name}</td>
+                                        <td className="py-2 pr-4 font-mono text-sm text-indigo-300 font-semibold">{r.studentId}</td>
                                         <td className="py-2">
                                             {r.hasVoted
                                                 ? <span className="text-green-400 text-xs font-medium">✅ Voted</span>

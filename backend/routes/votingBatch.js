@@ -40,19 +40,19 @@ router.get('/', auth, adminOnly, async (req, res) => {
         if (batch.studentIds && batch.studentIds.length > 0) {
             const users = await User.find(
                 { studentId: { $in: batch.studentIds } },
-                { studentId: 1, name: 1, hasVoted: 1, class: 1 }
+                { _id: 0, studentId: 1, name: 1, hasVoted: 1, class: 1 }
             ).lean();
 
             // Preserve order from studentIds
             const userMap = {};
             for (const u of users) {
-                userMap[u.studentId] = u;
+                userMap[String(u.studentId)] = u;
             }
             roster = batch.studentIds.map(id => {
-                const u = userMap[id];
+                const u = userMap[String(id)];
                 return u
-                    ? { studentId: u.studentId, name: u.name, class: u.class, hasVoted: u.hasVoted }
-                    : { studentId: id, name: 'Unknown', class: null, hasVoted: false };
+                    ? { studentId: String(u.studentId), name: u.name, class: u.class, hasVoted: u.hasVoted }
+                    : { studentId: String(id), name: 'Unknown', class: null, hasVoted: false };
             });
         }
 
