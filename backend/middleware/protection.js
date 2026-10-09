@@ -48,13 +48,26 @@ export const globalLimiter = rateLimit({
 });
 
 // ─── 3. Auth endpoint limiter ─────────────────────────────────────────────────
+// Raised from 20 → 200: many students share a single campus IP, so the old
+// limit triggered instantly and returned a 429 *without* CORS headers, which
+// the browser misreported as a CORS policy failure.
+// The custom handler explicitly mirrors the request's Origin so the browser
+// can read the real error message instead of a opaque network error.
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: 200,
     standardHeaders: true,
     legacyHeaders: false,
-    message: {
-        error: 'Too many login attempts. Please wait 15 minutes before trying again.'
+    handler: (req, res) => {
+        // Mirror the requesting origin so CORS doesn't swallow the 429
+        const origin = req.headers.origin;
+        if (origin) {
+            res.header('Access-Control-Allow-Origin', origin);
+            res.header('Access-Control-Allow-Credentials', 'true');
+        }
+        res.status(429).json({
+            error: 'Too many login attempts from your network. Please wait 15 minutes before trying again.'
+        });
     }
 });
 
