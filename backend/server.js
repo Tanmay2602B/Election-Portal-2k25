@@ -13,7 +13,6 @@ import votingBatchRoutes from './routes/votingBatch.js';
 import {
     helmetMiddleware,
     globalLimiter,
-    authLimiter,
     adminLimiter
 } from './middleware/protection.js';
 import { attachMongoCommandLogging } from './lib/mongoCommandLogging.js';
@@ -107,7 +106,7 @@ mongoose.connect(MONGODB_URI, { monitorCommands: true })
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Auth gets its own tighter limiter (brute-force login protection)
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 
 // Admin-operated routes get a generous limiter (dashboard makes many calls)
 app.use('/api/users',         adminLimiter, userRoutes);

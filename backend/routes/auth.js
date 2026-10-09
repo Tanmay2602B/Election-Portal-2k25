@@ -3,12 +3,11 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import auth from '../middleware/auth.js';
-import { deviceLoginCooldown } from '../middleware/protection.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 
-router.post('/login', deviceLoginCooldown, async (req, res) => {
+router.post('/login', async (req, res) => {
     // Students log in with voterId; admins log in with studentId
     const { voterId, studentId, password } = req.body;
     const isStudentLogin = typeof voterId === 'string' && voterId.trim();
