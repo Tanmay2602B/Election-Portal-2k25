@@ -8,15 +8,15 @@
  * 1. Helmet — sets secure HTTP headers (XSS, clickjacking, MIME-sniff, etc.)
  *
  * 2. Global rate limiter
- *    - 500 requests / minute per IP across all endpoints
+ *    - 3,000 requests / minute per IP across all endpoints
  *    - Protects every route with a single app.use()
  *
  * 3. Auth endpoint limiter
  *    - 500 attempts / minute per IP on POST /api/auth/login
  *
  * 4. Vote endpoint limiter
- *    - 10 submissions / 15 min per IP on POST /api/votes
- *    - Prevents ballot stuffing / scripted vote flooding
+ *    - 10 submissions / 15 min per authenticated voter on POST /api/votes
+ *    - Students on shared campus Wi-Fi have separate submission quotas
  *
  * 5. Concurrent vote gate (in-memory semaphore)
  *    - MAX_CONCURRENT_VOTERS (100) simultaneous POST /votes requests
@@ -39,7 +39,7 @@ export const helmetMiddleware = helmet();
 // ─── 2. Global rate limiter ───────────────────────────────────────────────────
 export const globalLimiter = rateLimit({
     windowMs: 60 * 1000,         // 1 minute
-    max: 500,                    // shared network quota, including login
+    max: 3000,                   // room for 300 six-request student flows plus headroom
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -144,17 +144,25 @@ export const authLimiter = rateLimit({
 export const voteLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
+    // Mounted after auth: use the verified JWT identity, never client-supplied IDs.
+    keyGenerator: (req) => `voter:${req.user?._id || req.user?.id || 'unknown'}`,
     standardHeaders: true,
     legacyHeaders: false,
-    message: {
-        error: 'Too many vote submissions from this IP. Please wait before trying again.'
+    handler: (req, res) => {
+        const retryAfterSeconds = Number(res.getHeader('Retry-After')) || 15 * 60;
+        res.status(429).json({
+            error: 'Too many vote attempts for your account. Please wait before trying again.',
+            retryAfterSeconds
+        });
     }
 });
 
-// ─── Admin/settings limiter (generous — admin does many writes) ───────────────
+// ─── Admin/settings write limiter ────────────────────────────────────────────
 export const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,                   // admin can do many saves, polls, etc.
+    // Student election-data reads are already covered by the global quota.
+    skip: (req) => req.method === 'GET' || req.method === 'HEAD',
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -176,9 +184,15 @@ export const concurrentVoteGate = (req, res, next) => {
     }
     activeVoters++;
 
-    // Release the slot when the response finishes (success or error)
-    res.on('finish', () => { activeVoters = Math.max(0, activeVoters - 1); });
-    res.on('close',  () => { activeVoters = Math.max(0, activeVoters - 1); });
+    // A normal response can emit both events; release each slot exactly once.
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        activeVoters = Math.max(0, activeVoters - 1);
+    };
+    res.once('finish', release);
+    res.once('close', release);
 
     next();
 };

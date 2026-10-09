@@ -146,7 +146,7 @@ router.post('/cooldown/start', auth, (req, res) => {
 // ─── STUDENT — individual vote submission ─────────────────────────────────────
 /**
  * POST /api/votes
- * Rate-limited to 10/15min per IP, concurrent cap 100.
+ * Rate-limited to 10/15min per authenticated voter, concurrent request cap 100.
  * Guarded by inline VotingBatch check (must be in an open batch).
  */
 router.post(

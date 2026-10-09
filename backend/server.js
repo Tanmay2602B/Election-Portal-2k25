@@ -109,7 +109,7 @@ mongoose.connect(MONGODB_URI, { monitorCommands: true })
 app.post('/api/auth/login', authLimiter);
 app.use('/api/auth', authRoutes);
 
-// Admin-operated routes get a generous limiter (dashboard makes many calls)
+// Limit writes on these routes; student GET/HEAD requests use the global quota.
 app.use('/api/users',         adminLimiter, userRoutes);
 app.use('/api/positions',     adminLimiter, positionRoutes);
 app.use('/api/candidates',    adminLimiter, candidateRoutes);
