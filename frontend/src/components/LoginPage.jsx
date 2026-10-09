@@ -80,6 +80,13 @@ function LoginPage() {
       } else if (err.response.status === 403) {
         setWakeCountdown(null);
         setError(err.response.data?.message || 'You have already voted and cannot login again.');
+      } else if (err.response.status === 429) {
+        // Rate limit, device lock, or credential cooldown
+        const data = err.response.data || {};
+        const retryAfter = data.retryAfterSeconds;
+        const msg = data.error || 'Too many attempts. Please wait before trying again.';
+        setWakeCountdown(null);
+        setError(retryAfter ? `${msg} (${retryAfter}s)` : msg);
       } else if (err.response.status === 500) {
         setWakeCountdown(null);
         setError('Server error. Please try again in a moment.');

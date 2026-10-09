@@ -5,7 +5,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json'
     },
-    timeout: 15000 // 15s — server is always live on Render
+    timeout: 45000 // 45s — handles concurrent bcrypt load on Render free tier
 });
 
 // Add a request interceptor to add the auth token to every request
