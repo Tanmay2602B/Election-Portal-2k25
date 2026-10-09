@@ -122,11 +122,11 @@ export const deviceLoginCooldown = (req, res, next) => {
 };
 
 // ─── 3a. Auth endpoint limiter ────────────────────────────────────────────────
-// 100 req / 1 min per IP — allows bulk student logins without bottleneck.
+// 200 req / 1 min per IP — all logins handled simultaneously, no queuing.
 // Custom handler mirrors Origin so CORS never swallows a 429.
 export const authLimiter = rateLimit({
     windowMs: 60 * 1000,   // 1 minute
-    max: 100,              // 100 logins per minute
+    max: 200,              // 200 logins per minute
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
@@ -141,63 +141,7 @@ export const authLimiter = rateLimit({
     }
 });
 
-// ─── 3a. Login concurrency queue ──────────────────────────────────────────────
-// When hundreds of students log in simultaneously, bcrypt.compare() saturates
-// the CPU thread pool and responses slow to a crawl. This middleware queues
-// excess requests and drains them in FIFO order — nobody is rejected, they
-// just wait their turn (typically < 1–2 s extra per student).
-//
-// MAX_CONCURRENT_LOGINS: how many bcrypt operations run in parallel.
-// QUEUE_TIMEOUT_MS:      max time a queued request will wait before we give
-//                        up and return a 503 (prevents memory leak on DDoS).
-const MAX_CONCURRENT_LOGINS = 100;  // 100 parallel bcrypt logins per minute
-const QUEUE_TIMEOUT_MS      = 30_000; // 30 s — students won't notice < 2 s
 
-let activeLogins = 0;
-const loginQueue = [];              // [ { run: fn, timer: TimeoutId } ]
-
-function drainLoginQueue() {
-    while (activeLogins < MAX_CONCURRENT_LOGINS && loginQueue.length > 0) {
-        const { run, timer } = loginQueue.shift();
-        clearTimeout(timer);
-        activeLogins++;
-        run();
-    }
-}
-
-export const loginQueueGate = (req, res, next) => {
-    if (activeLogins < MAX_CONCURRENT_LOGINS) {
-        // Slot available — go straight through
-        activeLogins++;
-        res.on('finish', () => { activeLogins = Math.max(0, activeLogins - 1); drainLoginQueue(); });
-        res.on('close',  () => { activeLogins = Math.max(0, activeLogins - 1); drainLoginQueue(); });
-        return next();
-    }
-
-    // No slot — enqueue and wait
-    let entry;
-    const timer = setTimeout(() => {
-        // Remove from queue if still waiting after timeout
-        const idx = loginQueue.indexOf(entry);
-        if (idx !== -1) loginQueue.splice(idx, 1);
-        const origin = req.headers.origin;
-        if (origin) {
-            res.header('Access-Control-Allow-Origin', origin);
-            res.header('Access-Control-Allow-Credentials', 'true');
-        }
-        res.status(503).json({ error: 'Login server is busy. Please try again in a moment.' });
-    }, QUEUE_TIMEOUT_MS);
-
-    entry = {
-        timer,
-        run: () => {
-            res.on('finish', () => { activeLogins = Math.max(0, activeLogins - 1); drainLoginQueue(); });
-            res.on('close',  () => { activeLogins = Math.max(0, activeLogins - 1); drainLoginQueue(); });
-            next();
-        }
-    };
-    loginQueue.push(entry);
-};
 
 // ─── 4. Vote submission limiter ───────────────────────────────────────────────
 export const voteLimiter = rateLimit({
