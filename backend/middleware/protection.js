@@ -8,11 +8,11 @@
  * 1. Helmet — sets secure HTTP headers (XSS, clickjacking, MIME-sniff, etc.)
  *
  * 2. Global rate limiter
- *    - 200 requests / 15 min per IP across all endpoints
+ *    - 500 requests / minute per IP across all endpoints
  *    - Protects every route with a single app.use()
  *
  * 3. Auth endpoint limiter
- *    - 20 requests / 15 min per IP on /api/auth (login brute-force)
+ *    - 500 attempts / minute per IP on POST /api/auth/login
  *
  * 4. Vote endpoint limiter
  *    - 10 submissions / 15 min per IP on POST /api/votes
@@ -38,12 +38,12 @@ export const helmetMiddleware = helmet();
 
 // ─── 2. Global rate limiter ───────────────────────────────────────────────────
 export const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,   // 15 minutes
-    max: 500,                    // raised: admin dashboards make many API calls
+    windowMs: 60 * 1000,         // 1 minute
+    max: 500,                    // shared network quota, including login
     standardHeaders: true,
     legacyHeaders: false,
     message: {
-        error: 'Too many requests from this IP, please try again after 15 minutes.'
+        error: 'Too many requests from this network. Please wait 1 minute before trying again.'
     }
 });
 
@@ -122,21 +122,18 @@ export const deviceLoginCooldown = (req, res, next) => {
 };
 
 // ─── 3a. Auth endpoint limiter ────────────────────────────────────────────────
-// 200 req / 1 min per IP — all logins handled simultaneously, no queuing.
-// Custom handler mirrors Origin so CORS never swallows a 429.
+// 500 login attempts / minute per IP; the global quota also applies.
+// CORS runs first so browsers can read blocked responses.
 export const authLimiter = rateLimit({
     windowMs: 60 * 1000,   // 1 minute
-    max: 200,              // 200 logins per minute
+    max: 500,              // 500 login attempts per minute
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
-        const origin = req.headers.origin;
-        if (origin) {
-            res.header('Access-Control-Allow-Origin', origin);
-            res.header('Access-Control-Allow-Credentials', 'true');
-        }
+        const retryAfterSeconds = Number(res.getHeader('Retry-After')) || 60;
         res.status(429).json({
-            error: 'Too many login attempts from your network. Please wait 1 minute before trying again.'
+            error: 'Too many login attempts from your network. Please wait before trying again.',
+            retryAfterSeconds
         });
     }
 });

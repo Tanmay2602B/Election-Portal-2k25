@@ -13,6 +13,7 @@ import votingBatchRoutes from './routes/votingBatch.js';
 import {
     helmetMiddleware,
     globalLimiter,
+    authLimiter,
     adminLimiter
 } from './middleware/protection.js';
 import { attachMongoCommandLogging } from './lib/mongoCommandLogging.js';
@@ -51,9 +52,6 @@ app.get(['/health', '/api/health', '/ping'], (req, res) => {
     });
 });
 
-// ─── Global DDoS / flood rate limiter — 200 req / 15 min per IP ──────────────
-app.use(globalLimiter);
-
 // ---------------------------------------------------------------------------
 // CORS — allow Vercel deployments, localhost dev, and any explicit overrides
 // ---------------------------------------------------------------------------
@@ -90,7 +88,9 @@ const corsOptions = {
     allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+// CORS must run before rate limits so browsers can read HTTP 429 responses.
 app.use(cors(corsOptions));
+app.use(globalLimiter);
 app.use(express.json());
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -105,7 +105,8 @@ mongoose.connect(MONGODB_URI, { monitorCommands: true })
     .catch((err) => console.error('MongoDB connection error:', err));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-// Auth gets its own tighter limiter (brute-force login protection)
+// Login has a finite 500-attempts/minute limit; the global quota also applies.
+app.post('/api/auth/login', authLimiter);
 app.use('/api/auth', authRoutes);
 
 // Admin-operated routes get a generous limiter (dashboard makes many calls)
