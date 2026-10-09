@@ -76,7 +76,7 @@ export const authLimiter = rateLimit({
 // MAX_CONCURRENT_LOGINS: how many bcrypt operations run in parallel.
 // QUEUE_TIMEOUT_MS:      max time a queued request will wait before we give
 //                        up and return a 503 (prevents memory leak on DDoS).
-const MAX_CONCURRENT_LOGINS = 20;   // tune: higher = more RAM, lower = slower
+const MAX_CONCURRENT_LOGINS = 100;  // 100 parallel bcrypt logins per minute
 const QUEUE_TIMEOUT_MS      = 30_000; // 30 s — students won't notice < 2 s
 
 let activeLogins = 0;
