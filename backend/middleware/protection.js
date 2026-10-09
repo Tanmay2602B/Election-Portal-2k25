@@ -47,7 +47,48 @@ export const globalLimiter = rateLimit({
     }
 });
 
-// ─── 3. Auth endpoint limiter ─────────────────────────────────────────────────
+// ─── 3. Per-credential login cooldown (1 login per voterId/studentId per 2 min)
+// Campus mein sab ka IP same hota hai, so IP-based blocking won't work.
+// Instead we track by the credential (voterId or studentId) from the request body.
+// Each student account gets its own independent 2-minute cooldown window.
+// Map is self-cleaning — entries auto-delete after the window expires.
+const LOGIN_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
+const credLoginMap = new Map();           // credential → lastAttemptTimestamp
+
+export const deviceLoginCooldown = (req, res, next) => {
+    const { voterId, studentId } = req.body || {};
+    // Use whichever credential was sent; normalise to uppercase to avoid case issues
+    const credential = (voterId || studentId || '').toString().trim().toUpperCase();
+
+    if (!credential) return next(); // no credential yet — let route handle the 400
+
+    const now  = Date.now();
+    const last = credLoginMap.get(credential);
+
+    if (last) {
+        const elapsed = now - last;
+        if (elapsed < LOGIN_COOLDOWN_MS) {
+            const remainingSecs = Math.ceil((LOGIN_COOLDOWN_MS - elapsed) / 1000);
+            const origin = req.headers.origin;
+            if (origin) {
+                res.header('Access-Control-Allow-Origin', origin);
+                res.header('Access-Control-Allow-Credentials', 'true');
+            }
+            return res.status(429).json({
+                error: `Already logged in recently. Please wait ${remainingSecs} second(s) before trying again.`,
+                retryAfterSeconds: remainingSecs
+            });
+        }
+    }
+
+    // Record this attempt; auto-clean after the cooldown window
+    credLoginMap.set(credential, now);
+    setTimeout(() => credLoginMap.delete(credential), LOGIN_COOLDOWN_MS);
+
+    next();
+};
+
+// ─── 3a. Auth endpoint limiter ────────────────────────────────────────────────
 // 500 req / 15 min per IP — generous ceiling for bulk campus logins.
 // The custom handler mirrors the Origin header so CORS never swallows a 429.
 export const authLimiter = rateLimit({
