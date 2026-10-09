@@ -55,7 +55,7 @@ export const globalLimiter = rateLimit({
 // can read the real error message instead of a opaque network error.
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: 500,
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
