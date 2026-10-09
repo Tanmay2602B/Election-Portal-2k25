@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Settings, Download, Upload, Search, Filter, RefreshCw, Archive, FileDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Settings, Download, Upload, Search, RefreshCw, Archive, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -24,8 +24,9 @@ const AdminManage = ({
     loadData
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [programFilter, setProgramFilter] = useState('');
+    const [semesterFilter, setSemesterFilter] = useState('');
     const [showImportPreview, setShowImportPreview] = useState(false);
-    const [pendingFile, setPendingFile] = useState(null);
 
     // Download a blank import template
     const downloadTemplate = () => {
@@ -50,15 +51,22 @@ const AdminManage = ({
         XLSX.writeFile(wb, 'student_import_template.xlsx');
     };
 
-    // Filter students
+    const fieldText = (value) => String(value ?? '').trim();
+    const sortOptions = (values) => [...new Set(values.filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+    const programs = sortOptions(students.map(student => fieldText(student.class)));
+    const semesters = sortOptions(students.map(student => fieldText(student.semester)));
+    const term = searchTerm.trim().toLowerCase();
+    const hasFilters = Boolean(term || programFilter || semesterFilter);
+
+    // Search and both dropdowns narrow the same list used by the filtered export.
     const filteredStudents = students.filter(student => {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch =
-            (student.name || '').toLowerCase().includes(term) ||
-            (student.studentId || '').toLowerCase().includes(term) ||
-            (student.voterId || '').toLowerCase().includes(term) ||
-            (student.class || '').toLowerCase().includes(term);
-        return matchesSearch;
+        const matchesSearch = [student.name, student.studentId, student.voterId, student.class]
+            .some(value => fieldText(value).toLowerCase().includes(term));
+        const matchesProgram = !programFilter || fieldText(student.class) === programFilter;
+        const matchesSemester = !semesterFilter || fieldText(student.semester) === semesterFilter;
+        return matchesSearch && matchesProgram && matchesSemester;
     });
 
     return (
@@ -178,22 +186,22 @@ const AdminManage = ({
                     <div className="flex flex-wrap gap-2">
                         <Button variant="ghost" onClick={loadData} icon={RefreshCw}>Refresh</Button>
 
+                        <Button variant="secondary" onClick={downloadTemplate} icon={FileDown} title="Download blank import template">
+                            Download Template
+                        </Button>
+
                         <div className="relative group">
                             <Button
                                 variant="secondary"
                                 icon={Upload}
                                 onClick={() => setShowImportPreview(true)}
                             >
-                                Import
+                                Import Sheet
                             </Button>
                             {/* Hidden file input triggered by button click via modal */}
                         </div>
 
-                        <Button variant="secondary" onClick={downloadTemplate} icon={FileDown} title="Download blank import template">
-                            Template
-                        </Button>
-
-                        <Button variant="secondary" onClick={exportCredentials} icon={Download}>Credentials</Button>
+                        <Button variant="secondary" onClick={() => exportCredentials()} icon={Download}>Export Registry</Button>
                         <Button
                             onClick={() => { setModalType('student'); setEditItem(null); setShowModal(true); }}
                             icon={Plus}
@@ -204,19 +212,51 @@ const AdminManage = ({
                 </div>
 
                 <Card className="overflow-hidden p-0">
-                    {/* Search Toolbar */}
-                    <div className="p-4 border-b border-white/10 flex flex-col md:flex-row gap-4">
-                        <div className="relative flex-1">
+                    {/* Registry search and filters */}
+                    <div className="p-4 border-b border-white/10 flex flex-wrap items-center gap-3">
+                        <div className="relative flex-1 min-w-[220px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <input
                                 type="text"
+                                aria-label="Search students"
                                 placeholder="Search by Name, ID, or Class..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="glass-input w-full pl-10 pr-4 py-2 rounded-lg"
                             />
                         </div>
-                        <div className="flex gap-2">
+                        <select
+                            aria-label="Filter by program"
+                            value={programFilter}
+                            onChange={(e) => setProgramFilter(e.target.value)}
+                            className="glass-input min-w-[145px] px-3 py-2.5 rounded-lg"
+                        >
+                            <option value="" className="bg-[#1e293b]">All programs</option>
+                            {programs.map(program => (
+                                <option key={program} value={program} className="bg-[#1e293b]">{program}</option>
+                            ))}
+                        </select>
+                        <select
+                            aria-label="Filter by semester"
+                            value={semesterFilter}
+                            onChange={(e) => setSemesterFilter(e.target.value)}
+                            className="glass-input min-w-[150px] px-3 py-2.5 rounded-lg"
+                        >
+                            <option value="" className="bg-[#1e293b]">All semesters</option>
+                            {semesters.map(semester => (
+                                <option key={semester} value={semester} className="bg-[#1e293b]">{semester}</option>
+                            ))}
+                        </select>
+                        <Button
+                            variant="secondary"
+                            icon={Download}
+                            onClick={() => exportCredentials(filteredStudents, 'filtered_student_credentials.xlsx')}
+                            disabled={!hasFilters || filteredStudents.length === 0}
+                            className="text-xs px-3 whitespace-nowrap"
+                        >
+                            Export Filtered Credentials
+                        </Button>
+                        <div className="flex flex-wrap gap-2">
                             <Button
                                 variant="danger"
                                 onClick={handleDeleteAllStudents}
@@ -235,6 +275,10 @@ const AdminManage = ({
                             </Button>
                         </div>
                     </div>
+
+                    <p className="px-4 py-2 text-xs text-gray-400" aria-live="polite">
+                        Showing {filteredStudents.length} of {students.length} students
+                    </p>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -294,7 +338,7 @@ const AdminManage = ({
                                 ))}
                                 {filteredStudents.length === 0 && (
                                     <tr>
-                                        <td colspan="6" className="p-8 text-center text-gray-500">
+                                        <td colSpan={7} className="p-8 text-center text-gray-500">
                                             No students found matching your criteria.
                                         </td>
                                     </tr>

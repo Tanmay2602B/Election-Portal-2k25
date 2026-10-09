@@ -413,9 +413,9 @@ const AdminDashboard = () => {
     XLSX.writeFile(wb, "election_results.xlsx");
   };
 
-  const exportCredentials = () => {
+  const exportCredentials = (studentsToExport = students, fileName = 'student_credentials.xlsx') => {
     const wb = XLSX.utils.book_new();
-    const rows = students.map(s => {
+    const rows = studentsToExport.map(s => {
       const cached = credentialsCache[s.studentId];
       return {
         'Student ID': s.studentId,
@@ -429,7 +429,7 @@ const AdminDashboard = () => {
     const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Note: 'No students found' }]);
     ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
-    XLSX.writeFile(wb, 'student_credentials.xlsx');
+    XLSX.writeFile(wb, fileName);
   };
 
   const exportStudentsBySemester = () => exportCredentials();
