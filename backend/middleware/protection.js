@@ -47,43 +47,76 @@ export const globalLimiter = rateLimit({
     }
 });
 
-// ─── 3. Per-credential login cooldown (1 login per voterId/studentId per 2 min)
-// Campus mein sab ka IP same hota hai, so IP-based blocking won't work.
-// Instead we track by the credential (voterId or studentId) from the request body.
-// Each student account gets its own independent 2-minute cooldown window.
-// Map is self-cleaning — entries auto-delete after the window expires.
-const LOGIN_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
-const credLoginMap = new Map();           // credential → lastAttemptTimestamp
+// ─── 3. Device-lock login middleware ──────────────────────────────────────────
+// Problem: Campus mein sab ka IP same hota hai — pure IP se block nahi ho sakta.
+// Solution: IP + User-Agent = device fingerprint (alag device = alag fingerprint).
+//
+// Rules enforced:
+//  A) Ek device pe ek VoterID login kiya → us device se koi AUR VoterID nahi
+//     (2 min tak). Physical device passing rokta hai.
+//  B) Ek VoterID ek baar hi login kar sakti hai (2 min cooldown).
+//
+// Both maps are self-cleaning — entries auto-delete after the window expires.
+const LOGIN_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+// fingerprint → { credential, expiresAt }   (device locked to a voterId)
+const deviceLockMap = new Map();
+// credential  → expiresAt                   (voterId cooldown)
+const credCooldownMap = new Map();
+
+function corsHeaders(req, res) {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+}
 
 export const deviceLoginCooldown = (req, res, next) => {
     const { voterId, studentId } = req.body || {};
-    // Use whichever credential was sent; normalise to uppercase to avoid case issues
     const credential = (voterId || studentId || '').toString().trim().toUpperCase();
 
-    if (!credential) return next(); // no credential yet — let route handle the 400
+    if (!credential) return next(); // missing credential — let route return 400
 
-    const now  = Date.now();
-    const last = credLoginMap.get(credential);
+    // Build a device fingerprint from IP + User-Agent
+    const ip        = req.ip || req.connection?.remoteAddress || 'unknown';
+    const ua        = req.headers['user-agent'] || 'unknown';
+    const fingerprint = `${ip}||${ua}`;
 
-    if (last) {
-        const elapsed = now - last;
-        if (elapsed < LOGIN_COOLDOWN_MS) {
-            const remainingSecs = Math.ceil((LOGIN_COOLDOWN_MS - elapsed) / 1000);
-            const origin = req.headers.origin;
-            if (origin) {
-                res.header('Access-Control-Allow-Origin', origin);
-                res.header('Access-Control-Allow-Credentials', 'true');
-            }
+    const now = Date.now();
+
+    // ── Rule A: Is this device already locked to a DIFFERENT voterId? ──────────
+    const deviceLock = deviceLockMap.get(fingerprint);
+    if (deviceLock && deviceLock.expiresAt > now) {
+        if (deviceLock.credential !== credential) {
+            const remainingSecs = Math.ceil((deviceLock.expiresAt - now) / 1000);
+            corsHeaders(req, res);
             return res.status(429).json({
-                error: `Already logged in recently. Please wait ${remainingSecs} second(s) before trying again.`,
+                error: `This device was already used to log in with another voter ID. Please wait ${remainingSecs} second(s) or use a different device.`,
                 retryAfterSeconds: remainingSecs
             });
         }
     }
 
-    // Record this attempt; auto-clean after the cooldown window
-    credLoginMap.set(credential, now);
-    setTimeout(() => credLoginMap.delete(credential), LOGIN_COOLDOWN_MS);
+    // ── Rule B: Is this voterId still in its own cooldown? ────────────────────
+    const credExpiry = credCooldownMap.get(credential);
+    if (credExpiry && credExpiry > now) {
+        const remainingSecs = Math.ceil((credExpiry - now) / 1000);
+        corsHeaders(req, res);
+        return res.status(429).json({
+            error: `This voter ID already logged in recently. Please wait ${remainingSecs} second(s) before trying again.`,
+            retryAfterSeconds: remainingSecs
+        });
+    }
+
+    // ── All clear — record device lock + credential cooldown ─────────────────
+    const expiresAt = now + LOGIN_COOLDOWN_MS;
+
+    deviceLockMap.set(fingerprint, { credential, expiresAt });
+    credCooldownMap.set(credential, expiresAt);
+
+    setTimeout(() => deviceLockMap.delete(fingerprint),  LOGIN_COOLDOWN_MS);
+    setTimeout(() => credCooldownMap.delete(credential), LOGIN_COOLDOWN_MS);
 
     next();
 };
