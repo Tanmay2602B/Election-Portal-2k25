@@ -122,11 +122,11 @@ export const deviceLoginCooldown = (req, res, next) => {
 };
 
 // ─── 3a. Auth endpoint limiter ────────────────────────────────────────────────
-// 500 req / 15 min per IP — generous ceiling for bulk campus logins.
-// The custom handler mirrors the Origin header so CORS never swallows a 429.
+// 100 req / 1 min per IP — allows bulk student logins without bottleneck.
+// Custom handler mirrors Origin so CORS never swallows a 429.
 export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 500,
+    windowMs: 60 * 1000,   // 1 minute
+    max: 100,              // 100 logins per minute
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
@@ -136,7 +136,7 @@ export const authLimiter = rateLimit({
             res.header('Access-Control-Allow-Credentials', 'true');
         }
         res.status(429).json({
-            error: 'Too many login attempts from your network. Please wait 15 minutes before trying again.'
+            error: 'Too many login attempts from your network. Please wait 1 minute before trying again.'
         });
     }
 });
